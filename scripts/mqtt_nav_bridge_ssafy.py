@@ -35,9 +35,13 @@ NODE_2_WAYPOINT_3 = { 'x': 0.842, 'y': -1.81, 'z': 0.0, 'yaw': 1.08 }
 NODE_2_COORD = { 'x': 1.15, 'y': -0.384,'z': 0.0, 'yaw': 1.57 }
 
 GOAL_MAP = {
-    "NODE_1": NODE_1_COORD,
-    "NODE_2": [NODE_2_WAYPOINT_1, NODE_2_WAYPOINT_2, NODE_2_WAYPOINT_3, NODE_2_COORD],
- 	"ORIGIN": ORIGIN_GOAL
+    "NODE_1_COORD": NODE_1_COORD,
+	"NODE_2_WAYPOINT_1": NODE_2_WAYPOINT_1,
+	"NODE_2_WAYPOINT_2": NODE_2_WAYPOINT_2,
+	"NODE_2_WAYPOINT_3": NODE_2_WAYPOINT_3,
+	"NODE_2_COORD": NODE_2_COORD,
+    "NODE_2_TOTAL": [NODE_2_WAYPOINT_1, NODE_2_WAYPOINT_2, NODE_2_WAYPOINT_3, NODE_2_COORD],
+    "ORIGIN_GOAL": ORIGIN_GOAL
 }
 
 def euler_from_quaternion(x, y, z, w):
@@ -63,8 +67,12 @@ class MqttNavBridge(Node):
         # 1. Nav2 Action Client 설정
         self._action_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
         
+        # [수정] Nav2 서버 상태를 관리하는 변수 및 타이머
+        self.is_nav2_ready = False
+        self.nav2_check_timer = self.create_timer(1.0, self.check_nav2_server_ready)
+        self.get_logger().info("⏳ Waiting for Nav2 Server to come online...")
+
         # [중요] 프로그램 시작 시, 자동으로 초기 위치를 쏴줍니다!
-        # 약간의 딜레이를 주어 Nav2가 켜진 후 받도록 함
         self.get_logger().info("Setting Initial Pose in 2 seconds...")
         self.timer_init = self.create_timer(2.0, self.set_initial_pose_once)
 
@@ -102,7 +110,21 @@ class MqttNavBridge(Node):
         self.timer = self.create_timer(MONITOR_INTERVAL, self.publish_periodic_status)
         self.get_logger().info(f"Monitoring Active (Interval: {MONITOR_INTERVAL}s)")
 
-    # [추가된 함수] 자동으로 초기 위치를 쏘는 함수
+    # [추가] 주기적으로 Nav2 서버 연결 상태를 확인하는 함수
+    def check_nav2_server_ready(self):
+        if self._action_client.server_is_ready():
+            self.get_logger().info("✅ ========================================")
+            self.get_logger().info("✅ [알림] Nav2 액션 서버 연결 성공!")
+            self.get_logger().info("✅ 이제 로봇이 이동 명령을 수행할 수 있습니다.")
+            self.get_logger().info("✅ ========================================")
+            
+            self.is_nav2_ready = True
+            self.nav2_check_timer.cancel() # 연결됐으므로 타이머 종료
+        else:
+            # 아직 연결 안 됨 (로그가 너무 많이 뜨지 않게 주석 처리하거나 필요시 사용)
+            pass
+
+    # [수정] 자동으로 초기 위치를 쏘는 함수 (대기 로직 제거)
     def set_initial_pose_once(self):
         self.timer_init.cancel() # 한 번만 실행하고 타이머 끔
         
@@ -121,18 +143,9 @@ class MqttNavBridge(Node):
         pose_msg.pose.pose.orientation.w = math.cos(yaw / 2.0)
         
         self.initial_pose_pub.publish(pose_msg)
-        self.get_logger().info(f"✅ Initial Pose Set to: ({ORIGIN_GOAL['x']}, {ORIGIN_GOAL['y']})")
+        self.get_logger().info(f"✅ Initial Pose Published: ({ORIGIN_GOAL['x']}, {ORIGIN_GOAL['y']})")
         
-        # Nav2 서버 대기 시작 (이제 준비될 확률이 높음)
-        self.wait_for_nav2()
-
-    def wait_for_nav2(self):
-        self.get_logger().info("Waiting for Nav2 Action Server...")
-        # 5초만 기다려보고 안 되면 로그 띄우고 패스 (모니터링 멈춤 방지)
-        if self._action_client.wait_for_server(timeout_sec=5.0):
-            self.get_logger().info("Nav2 Action Client Ready!")
-        else:
-            self.get_logger().warn("Nav2 Server not ready yet. Will retry on next command.")
+        # 참고: 여기서 wait_for_nav2를 호출하지 않고, check_nav2_server_ready 타이머가 알아서 처리하도록 둡니다.
 
     def pose_callback(self, msg):
         self.current_pose = msg.pose.pose
@@ -191,9 +204,10 @@ class MqttNavBridge(Node):
         self.send_goal_to_nav2(next_goal)
 
     def send_goal_to_nav2(self, target_data):
-        # 서버 준비 상태 짧게 확인
-        if not self._action_client.server_is_ready():
-             self.get_logger().warn("Nav2 Server Not Ready! Skipping this goal.")
+        # [수정] Nav2 서버가 준비되었는지 확인
+        if not self.is_nav2_ready:
+             self.get_logger().warn("⛔ [경고] 아직 Nav2 서버가 준비되지 않았습니다! 명령을 무시합니다.")
+             # 실패 시 큐 복구 로직이 필요하다면 여기에 추가 (지금은 그냥 스킵)
              return
 
         goal_msg = NavigateToPose.Goal()
@@ -237,8 +251,10 @@ class MqttNavBridge(Node):
             self.process_next_goal()
         else:
             self.get_logger().warn(f'Goal Failed: {status}')
+            time.sleep(1.0)
+            self.process_next_goal()
             self.robot_status = "IDLE"
-            self.goal_queue = []
+#self.goal_queue = []
 
     def publish_periodic_status(self):
         x = 0.0
