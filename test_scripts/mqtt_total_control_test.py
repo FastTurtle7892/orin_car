@@ -168,6 +168,10 @@ class MqttTotalControl(Node):
                 self.current_mode = "DOCKING"
                 self.get_logger().info("🔄 Mode Set -> DOCKING")
 
+            elif cmd == "DOCKING_RELEASE":
+                self.current_mode = "RELEASE"
+                self.get_logger().info("🔄 Mode Set -> RELEASE (놓기)")
+            
             elif cmd == "STOP":
                 self.current_mode = "IDLE"
                 self.get_logger().info("🔄 Mode Set -> IDLE")

@@ -3,13 +3,14 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from std_msgs.msg import String
-from sensor_msgs.msg import Image  # 이미지 수신용
-from cv_bridge import CvBridge     # 변환용
+from sensor_msgs.msg import Image 
+from cv_bridge import CvBridge    
 import cv2
 import sys
 import time
 import os
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, QoSDurabilityPolicy
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from docking_ai_test import DockingAI
 
@@ -18,7 +19,7 @@ class DockingController(Node):
         super().__init__('docking_controller')
         
         self.get_logger().info("====================================")
-        self.get_logger().info("🔒 도킹 컨트롤러 (수신기 모드) 시작 🔒") 
+        self.get_logger().info("🔒 도킹/릴리즈 컨트롤러 시작 🔒") 
         self.get_logger().info("====================================")
 
         qos_profile = QoSProfile(
@@ -37,7 +38,6 @@ class DockingController(Node):
         self.cmd_publisher = self.create_publisher(Twist, '/cmd_vel', 10)
         self.gripper_publisher = self.create_publisher(String, '/gripper_cmd', 10)
         
-        # 시스템 모드 구독
         self.mode_sub = self.create_subscription(
             String, 
             '/system_mode', 
@@ -45,7 +45,6 @@ class DockingController(Node):
             qos_profile
         )
         
-        # ✅ [핵심 변경] 카메라 직접 여는 대신 video_stack이 주는 이미지 구독
         self.img_sub = self.create_subscription(
             Image,
             '/camera/rear/raw',
@@ -59,23 +58,21 @@ class DockingController(Node):
 
         self.ai = DockingAI()
         
-        self.is_docking_process_started = False
+        self.is_process_started = False
         self.create_timer(1.0, self.send_init_gripper)
         self.is_init_sent = False
 
         self.TARGET_DIST = 16.5
         self.STOP_TOLERANCE = 1.0 
-        self.FIXED_SPEED = -0.25
+        self.FIXED_SPEED = -0.1
         
         self.system_mode = "IDLE"
-        self.is_docked = False
 
     def image_callback(self, msg):
-        """ ROS Image 메시지를 OpenCV 포맷으로 변환해서 저장 """
         try:
             self.latest_frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
         except Exception as e:
-            self.get_logger().error(f"이미지 변환 실패: {e}")
+            pass
 
     def mode_callback(self, msg):
         if self.system_mode != msg.data:
@@ -83,9 +80,13 @@ class DockingController(Node):
             self.system_mode = msg.data
             
             if self.system_mode == "DOCKING":
-                self.is_docked = False
-                self.is_docking_process_started = False
-                self.latest_frame = None # 이전 잔상 제거
+                self.is_process_started = False
+                self.latest_frame = None 
+            
+            # ✅ [추가] RELEASE 모드 감지 시 즉시 놓기 동작 실행
+            elif self.system_mode == "RELEASE":
+                self.perform_release_sequence()
+
             else:
                 self.stop_robot()
 
@@ -99,29 +100,49 @@ class DockingController(Node):
         msg.data = command
         self.gripper_publisher.publish(msg)
 
+    # ----------------------------------------------------
+    # [수정] 잡기 (PICK) 시퀀스
+    # ----------------------------------------------------
     def execute_grip_sequence(self):
-        self.get_logger().info("🚀 잡기 시퀀스 시작")
-        self.publish_gripper("DOWN"); time.sleep(2.0) 
-        self.publish_gripper("GRIP"); time.sleep(2.0)
-        self.publish_gripper("UP"); time.sleep(2.0)
-        self.get_logger().info("✅ 잡기 완료")
+        self.get_logger().info("🚀 잡기(PICK) 명령 전송")
+        self.publish_gripper("PICK") # 드라이버의 PICK 시퀀스 호출
+        time.sleep(4.0)              # 물리적 동작 시간 대기
+        self.get_logger().info("✅ 잡기 동작 완료")
+
+    # ----------------------------------------------------
+    # ✅ [추가] 놓기 (RELEASE/PLACE) 시퀀스
+    # ----------------------------------------------------
+    def perform_release_sequence(self):
+        self.get_logger().info("🔓 놓기(RELEASE) 시퀀스 시작")
+        self.stop_robot() # 혹시 움직이고 있다면 정지
+        
+        self.get_logger().info("🚀 놓기(PLACE) 명령 전송")
+        self.publish_gripper("PLACE") # 드라이버의 PLACE 시퀀스 호출 (아까 만든 코드에 있음)
+        
+        # 동작 시간 대기 (내리기+벌리기+올리기)
+        time.sleep(4.0)
+        
+        self.get_logger().info("✅ 놓기 완료! IDLE 모드로 복귀")
+        
+        # 완료 신호 전송
+        done_msg = String()
+        done_msg.data = "RELEASE_COMPLETE"
+        self.completion_pub.publish(done_msg)
+        
+        # 스스로 IDLE 상태로 전환
+        self.system_mode = "IDLE"
 
     def timer_callback(self):
-        # 도킹 중이 아니면 스킵
+        # DOCKING 모드일 때만 비전 처리 수행
         if self.system_mode != "DOCKING": return
-        if self.is_docked: return
-        if self.is_docking_process_started: return
+        if self.is_process_started: return
 
-        # ✅ [변경] 카메라 read() 대신 구독한 최신 프레임 사용
         frame = self.latest_frame
-        if frame is None:
-            # video_stack.py가 아직 이미지를 안 보내주거나 로딩중인 상태
-            return
+        if frame is None: return
 
         try:
             data, processed_frame = self.ai.process(frame)
-        except Exception:
-            return
+        except Exception: return
 
         cmd_msg = Twist()
 
@@ -134,7 +155,7 @@ class DockingController(Node):
             error_dist = dist - self.TARGET_DIST
             
             if abs(error_dist) <= self.STOP_TOLERANCE:
-                self.is_docking_process_started = True 
+                self.is_process_started = True 
                 self.perform_docking(dist)
                 return
             else:
@@ -142,7 +163,6 @@ class DockingController(Node):
                 if error_dist < -self.STOP_TOLERANCE: speed = -self.FIXED_SPEED 
                 k_steer = 0.05
                 steer = max(min(x_err * k_steer, 0.5), -0.5)
-                
                 cmd_msg.linear.x = speed
                 cmd_msg.angular.z = steer
         else:
@@ -156,18 +176,15 @@ class DockingController(Node):
         self.stop_robot()
         self.get_logger().info(f"🎯 도착 완료! ({dist:.1f}cm)")
         
+        # 잡기 실행
         self.execute_grip_sequence()
         
-        self.is_docked = True
-        
-        # 완료 신호 전송 -> 이후 video_stack이 IDLE/DRIVING 모드로 바꾸면 카메라 복귀됨
         done_msg = String()
         done_msg.data = "DOCKING_COMPLETE"
         self.completion_pub.publish(done_msg)
         self.get_logger().info("📢 도킹 완료! (DOCKING_COMPLETE)")
         
-        self.is_docking_process_started = False
-        # 모드를 IDLE로 변경하여 루프 종료
+        self.is_process_started = False
         self.system_mode = "IDLE"
 
     def stop_robot(self):
@@ -177,7 +194,6 @@ class DockingController(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = DockingController()
-    
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

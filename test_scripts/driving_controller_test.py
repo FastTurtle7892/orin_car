@@ -38,8 +38,8 @@ class DrivingController(Node):
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self._action_client = ActionClient(self, FollowPath, 'follow_path')
         
-        # 3. 파라미터
-        self.declare_parameter('init_x',-0.8893)
+        # 3. 파라미터 (초기 위치)
+        self.declare_parameter('init_x', -0.8893)
         self.declare_parameter('init_y',  2.5)
         self.declare_parameter('init_yaw', -1.57)
 
@@ -68,15 +68,25 @@ class DrivingController(Node):
         self.get_logger().info(f"📍 Initial Pose Set: ({x}, {y})")
 
     def mode_callback(self, msg):
+        previous_mode = self.current_mode
         self.current_mode = msg.data
+        
+        # 모드가 바뀌었을 때 로그 출력
+        if previous_mode != self.current_mode:
+            self.get_logger().info(f"🔄 System Mode Changed: {previous_mode} -> {self.current_mode}")
+
+        # DRIVING이 아닌 모드로 바뀌면 즉시 주행 취소
         if self.current_mode != "DRIVING" and self.current_goal_handle:
             self.cancel_nav2()
 
     def path_callback(self, msg):
         """ MQTT 노드로부터 경로 토픽을 받았을 때 실행됨 """
+        
+        # [핵심 수정] 경로 명령이 왔다는 것은 무조건 주행하라는 뜻입니다.
+        # 따라서 현재 모드가 IDLE이라도 강제로 DRIVING으로 인식하고 진행합니다.
         if self.current_mode != "DRIVING":
-            self.get_logger().warn("⚠️ Not in DRIVING mode. Ignoring path.")
-            return
+            self.get_logger().warn("⚠️ 경로 수신됨 (Auto Switch to DRIVING)")
+            self.current_mode = "DRIVING"
 
         try:
             # JSON 문자열을 파싱해서 리스트로 변환
