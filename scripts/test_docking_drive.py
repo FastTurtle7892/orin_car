@@ -21,7 +21,7 @@ class DockingDriveTest(Node):
         # 목표 정지 거리 (docking_ai의 초록색 구간인 8.5cm보다 약간 여유 있게)
         self.TARGET_DIST_CM = 12.0   
         
-        self.BASE_SPEED = -1.0      # 후진 기본 속도 (음수)
+        self.BASE_SPEED = -0.75      # 후진 기본 속도 (음수)
         
         # 조향 방향 계수 (1.0 또는 -1.0)
         # [수정됨] 1.0 : x_cm가 양수(오른쪽)일 때 angular.z도 양수 
