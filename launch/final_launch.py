@@ -9,71 +9,89 @@ def generate_launch_description():
     pkg_name = 'orin_car'
     pkg_share = get_package_share_directory(pkg_name)
 
-    # 1. 기본 주행 시스템 (Lidar, Nav2, Driver)
-    # 기존 trailer_nav_launch.py 실행
+    # =========================================================
+    # 1. 기본 주행 시스템 (Lidar, Nav2, Driver, TF 등)
+    # =========================================================
+    # [핵심] 기존에 잘 되던 설정을 그대로 가져옵니다. 
+    # 라이다 오류는 이걸로 해결됩니다.
     base_system = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_share, 'launch', 'trailer_nav_launch.py')
         )
     )
 
-    # 2. 전방 카메라 (마샬러 & 기장 UI 송출용)
-    # MJPEG 포맷, 320x240 해상도 (성능 최적화)
+    # =========================================================
+    # 2. 카메라 시스템 (Front: video0 / Rear: video2)
+    # =========================================================
     front_cam = Node(
-        package='usb_cam', 
+        package='usb_cam',
         executable='usb_cam_node_exe',
         name='front_camera',
         namespace='front_camera',
         parameters=[{
-            'video_device': '/dev/video0', # 포트 확인 필요 (ls /dev/video*)
-            'image_width': 320,
+            'video_device': '/dev/video0',   # 전면
+            'framerate': 30.0,
+            'image_width': 320,  # 성능 최적화 (320x240)
             'image_height': 240,
-            'pixel_format': 'mjpeg',
-            'framerate': 30.0
-        }]
+            'pixel_format': 'mjpeg'
+        }],
+        remappings=[('/image_raw', '/front_camera/image_raw')]
     )
 
-    # 3. 후방 카메라 (도킹용)
     rear_cam = Node(
-        package='usb_cam', 
+        package='usb_cam',
         executable='usb_cam_node_exe',
         name='rear_camera',
         namespace='rear_camera',
         parameters=[{
-            'video_device': '/dev/video2', # 포트 확인 필요
+            'video_device': '/dev/video2',   # 후면
+            'framerate': 30.0,
             'image_width': 320,
             'image_height': 240,
-            'pixel_format': 'mjpeg',
-            'framerate': 30.0
-        }]
+            'pixel_format': 'mjpeg'
+        }],
+        remappings=[('/image_raw', '/rear_camera/image_raw')]
     )
 
-    # 4. 웹 비디오 서버 (기장 UI 영상 송출용)
-    # 접속 주소: http://<로봇IP>:8080/stream?topic=/front_camera/image_raw&type=mjpeg
-    web_video_server = Node(
+    web_server = Node(
         package='web_video_server',
         executable='web_video_server',
+        name='web_video_server',
         output='screen',
         parameters=[{'port': 8080}]
     )
 
-    # 5. 미션 마스터 (통합 제어)
-    # 다른 노드들이 켜질 시간을 주기 위해 5초 뒤 실행
+    # =========================================================
+    # 3. 추가된 미션 & 제어 노드
+    # =========================================================
+    
+    # (1) 경로 추종 (MQTT Path Follower) - [새로 추가된 기능]
+    path_follower = Node(
+        package='orin_car',
+        executable='mqtt_path_follower.py',
+        name='mqtt_path_follower',
+        output='screen'
+    )
+
+    # (2) 미션 마스터 (도킹/마샬링 총괄)
+    # 시스템이 안정화된 후(5초 뒤) 실행
     mission_master = TimerAction(
-        period=5.0,
+        period=5.0, 
         actions=[
             Node(
-                package=pkg_name,
+                package='orin_car',
                 executable='mission_master.py',
+                name='mission_master',
                 output='screen'
             )
         ]
     )
 
     return LaunchDescription([
-        base_system,
-        front_cam,
-        rear_cam,
-        web_video_server,
-        mission_master
+        base_system,      # 기존 주행 시스템 (라이다/오도메트리 포함)
+        front_cam,        # 전면 카메라
+        rear_cam,         # 후면 카메라
+        web_server,       # 웹 비디오 서버
+        path_follower,    # [NEW] 경로 추종
+        mission_master    # [NEW] 미션 마스터
     ])
