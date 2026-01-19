@@ -1,0 +1,131 @@
+<?xml version="1.0"?>
+<robot name="ackermann_car" xmlns:xacro="http://ros.org/wiki/xacro">
+
+  <xacro:property name="chassis_length" value="0.25"/> <xacro:property name="chassis_width" value="0.14"/>  <xacro:property name="chassis_height" value="0.05"/> <xacro:property name="wheel_radius" value="0.03"/>   <xacro:property name="wheel_width" value="0.02"/>    <xacro:property name="wheel_offset_x" value="0.09"/> <xacro:property name="wheel_offset_y" value="0.08"/> <xacro:property name="lidar_radius" value="0.035"/>
+  <xacro:property name="lidar_height" value="0.04"/>
+  <xacro:property name="lidar_z_offset" value="${chassis_height/2 + lidar_height/2}"/>
+
+  <material name="blue">
+    <color rgba="0 0 0.8 1"/>
+  </material>
+  <material name="black">
+    <color rgba="0 0 0 1"/>
+  </material>
+  <material name="white">
+    <color rgba="1 1 1 1"/>
+  </material>
+
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+      </geometry>
+      <material name="blue"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </collision>
+  </link>
+
+  <link name="base_footprint"/>
+  <joint name="base_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="base_footprint"/>
+    <origin xyz="0 0 ${-chassis_height/2 - wheel_radius}" rpy="0 0 0"/>
+  </joint>
+
+  <xacro:macro name="wheel" params="name x y">
+    <link name="${name}_wheel">
+      <visual>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+        </geometry>
+        <material name="black"/>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/> </visual>
+    </link>
+    <joint name="${name}_wheel_joint" type="continuous">
+      <parent link="base_link"/>
+      <child link="${name}_wheel"/>
+      <origin xyz="${x} ${y} ${-chassis_height/2}" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+    </joint>
+  </xacro:macro>
+
+  <link name="front_left_steering_link">
+    <visual><geometry><sphere radius="0.01"/></geometry></visual>
+  </link>
+  <joint name="front_left_steering_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="front_left_steering_link"/>
+    <origin xyz="${wheel_offset_x} ${wheel_offset_y} ${-chassis_height/2}" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/> <limit lower="-0.6" upper="0.6" effort="10" velocity="1"/>
+  </joint>
+  <link name="front_left_wheel">
+     <visual>
+        <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
+        <material name="black"/>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+     </visual>
+  </link>
+  <joint name="front_left_wheel_joint" type="continuous">
+    <parent link="front_left_steering_link"/>
+    <child link="front_left_wheel"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <link name="front_right_steering_link">
+    <visual><geometry><sphere radius="0.01"/></geometry></visual>
+  </link>
+  <joint name="front_right_steering_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="front_right_steering_link"/>
+    <origin xyz="${wheel_offset_x} ${-wheel_offset_y} ${-chassis_height/2}" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-0.6" upper="0.6" effort="10" velocity="1"/>
+  </joint>
+  <link name="front_right_wheel">
+     <visual>
+        <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
+        <material name="black"/>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+     </visual>
+  </link>
+  <joint name="front_right_wheel_joint" type="continuous">
+    <parent link="front_right_steering_link"/>
+    <child link="front_right_wheel"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+
+  <xacro:wheel name="rear_left"  x="${-wheel_offset_x}" y="${wheel_offset_y}"/>
+  <xacro:wheel name="rear_right" x="${-wheel_offset_x}" y="${-wheel_offset_y}"/>
+
+  <link name="laser_frame">
+    <visual>
+      <geometry>
+        <cylinder radius="${lidar_radius}" length="${lidar_height}"/>
+      </geometry>
+      <material name="black"/> <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="${lidar_radius}" length="${lidar_height}"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </collision>
+  </link>
+
+  <joint name="lidar_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="laser_frame"/>
+    <origin xyz="0 0 ${lidar_z_offset}" rpy="0 0 0"/>
+  </joint>
+
+</robot>
+
