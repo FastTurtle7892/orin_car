@@ -3,7 +3,7 @@ slam_toolbox:
     # 1. 프레임 설정 (가장 중요)
     odom_frame: odom
     map_frame: map
-    base_frame: base_footprint  # URDF의 부모 링크와 일치해야 함
+    base_frame: base_link  # URDF의 부모 링크와 일치해야 함
     scan_topic: /scan
 
     # 2. SLAM 모드
