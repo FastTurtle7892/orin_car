@@ -10,10 +10,10 @@ def generate_launch_description():
     pkg_name = 'orin_car'
     pkg_share = get_package_share_directory(pkg_name)
 
-    # 파일 경로 설정 (config 폴더 사용)
+    # [수정됨] 경로를 'config'로 변경
     xacro_file = os.path.join(pkg_share, 'urdf', 'ackermann_car.urdf.xacro')
-    lidar_config_file = os.path.join(pkg_share, 'config', 'X4-Pro.yaml')
-    slam_config_file = os.path.join(pkg_share, 'config', 'slam_params.yaml')
+    lidar_config_file = os.path.join(pkg_share, 'config', 'X4-Pro.yaml')      # configs -> config
+    slam_config_file = os.path.join(pkg_share, 'config', 'slam_params.yaml')  # configs -> config
 
     # URDF 파싱
     doc = xacro.process_file(xacro_file)
@@ -27,7 +27,7 @@ def generate_launch_description():
         parameters=[robot_description_config]
     )
 
-    # [Node 2] RF2O Laser Odometry
+    # [Node 2] RF2O Laser Odometry (라이다 오도메트리)
     node_rf2o = Node(
         package='rf2o_laser_odometry',
         executable='rf2o_laser_odometry_node',
@@ -65,18 +65,9 @@ def generate_launch_description():
         }.items()
     )
 
-    # [Node 5] Ackermann Driver (모터 제어 노드 추가!)
-    # CMakeLists.txt에서 install(PROGRAMS ...)로 설치했으므로 실행 가능
-    node_ackermann_driver = Node(
-        package='orin_car',
-        executable='ackermann_driver.py',
-        output='screen'
-    )
-
     return LaunchDescription([
         node_robot_state_publisher,
         node_rf2o,
         node_ydlidar,
-        slam_toolbox_launch,
-        node_ackermann_driver  # 여기에 추가되었습니다!
+        slam_toolbox_launch
     ])
