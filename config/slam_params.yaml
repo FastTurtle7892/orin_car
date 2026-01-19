@@ -1,0 +1,46 @@
+slam_toolbox:
+  ros__parameters:
+    # 1. 프레임 설정 (가장 중요)
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_footprint  # URDF의 부모 링크와 일치해야 함
+    scan_topic: /scan
+
+    # 2. SLAM 모드
+    mode: mapping
+    debug_logging: false
+    throttle_scans: 1
+    transform_publish_period: 0.05 # 20Hz
+    map_update_interval: 0.5
+    resolution: 0.05
+
+    # 3. 라이다 센서 설정 (YDLidar X4 기준)
+    max_laser_range: 10.0 # 라이다 최대 거리
+    minimum_time_interval: 0.5
+    transform_timeout: 0.2
+    tf_buffer_duration: 30.
+    stack_size_to_use: 40000000
+    enable_interactive_mode: true
+
+    # 4. 알고리즘 내부 설정 (기본값 권장)
+    use_scan_barycenter: true
+    minimum_travel_distance: 0.1
+    minimum_travel_heading: 0.1
+    scan_buffer_size: 10
+    scan_buffer_maximum_scan_distance: 10.0
+    link_match_minimum_response_fine: 0.1  
+    link_scan_maximum_distance: 1.5
+    loop_search_maximum_distance: 3.0
+    do_loop_closing: true 
+    loop_match_minimum_chain_size: 10           
+    loop_match_maximum_variance_coarse: 3.0  
+    loop_match_minimum_response_coarse: 0.35   
+    loop_match_minimum_response_fine: 0.45
+
+    # 5. 솔버 플러그인
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: None
