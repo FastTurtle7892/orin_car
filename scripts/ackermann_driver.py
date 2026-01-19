@@ -28,7 +28,7 @@ class AckermannDriver(Node):
         
         # === [중요] 조향 각도 설정 ===
         self.center_angle = 100.0   # 정면 (바퀴 정렬)
-        self.max_turn_angle = 35.0  # 최대 꺾임 각도 (키보드 꽉 눌렀을 때)
+        self.max_turn_angle = 25.0  # 최대 꺾임 각도 (키보드 꽉 눌렀을 때)
         # 결과: 좌 65도 ~ 우 135도 사이에서 움직임
         
         # 초기화

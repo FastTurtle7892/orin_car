@@ -10,6 +10,13 @@ find_package(rclcpp REQUIRED)
 find_package(rclpy REQUIRED)
 # ... (다른 의존성들은 그대로 둬도 됨)
 
+
+install(PROGRAMS
+  scripts/ackermann_driver.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+
 # Launch, Config, URDF 폴더를 설치 목록에 추가
 install(DIRECTORY
   launch
