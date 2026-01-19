@@ -60,7 +60,7 @@ class AckermannDriver(Node):
         self.kit.servo[self.servo_channel].angle = target_angle
         
         # === [2] 속도 제어 (Throttle) ===
-        self.set_throttle(msg.linear.x)
+        self.set_throttle(-msg.linear.x)
 
     def set_throttle(self, throttle):
         # 속도 제한 (SLAM 품질을 위해 너무 빠르면 안 됨)
