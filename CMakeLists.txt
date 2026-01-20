@@ -13,7 +13,7 @@ find_package(rclpy REQUIRED)
 # Launch, Config, URDF 폴더를 설치 목록에 추가
 install(DIRECTORY
   launch
-  configs
+  config
   urdf
   DESTINATION share/${PROJECT_NAME}
 )
