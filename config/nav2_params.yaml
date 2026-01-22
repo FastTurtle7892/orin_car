@@ -1,6 +1,6 @@
 amcl:
   ros__parameters:
-    use_sim_time: False
+    use_sim_time: False   # [수정] 실제 로봇이므로 False
     alpha1: 0.2
     alpha2: 0.2
     alpha3: 0.2
@@ -29,62 +29,28 @@ amcl:
     save_pose_rate: 0.5
     sigma_hit: 0.2
     tf_broadcast: true
-    transform_tolerance: 1.0
-    update_min_a: 0.2
-    update_min_d: 0.25
+    transform_tolerance: 2.0  # [수정] 네트워크 지연 고려하여 1.0 -> 2.0으로 증가
+    updater_error: 0.2
+    updater_free: 0.4
     z_hit: 0.5
     z_max: 0.05
     z_rand: 0.5
     z_short: 0.05
+    scan_topic: scan
 
 bt_navigator:
   ros__parameters:
-    use_sim_time: False
+    use_sim_time: False   # [수정]
     global_frame: map
     robot_base_frame: base_link
-    odom_topic: /odom_rf2o
+    odom_topic: /odom
     bt_loop_duration: 10
     default_server_timeout: 20
-    enable_groot_monitoring: True
-    groot_zmq_publisher_port: 1666
-    groot_zmq_server_port: 1667
-    plugin_lib_names:
-    - nav2_compute_path_to_pose_action_bt_node
-    - nav2_compute_path_through_poses_action_bt_node
-    - nav2_smooth_path_action_bt_node
-    - nav2_follow_path_action_bt_node
-    - nav2_spin_action_bt_node
-    - nav2_wait_action_bt_node
-    - nav2_assisted_teleop_action_bt_node
-    - nav2_back_up_action_bt_node
-    - nav2_drive_on_heading_action_bt_node
-    - nav2_clear_costmap_service_bt_node
-    - nav2_is_stuck_condition_bt_node
-    - nav2_goal_reached_condition_bt_node
-    - nav2_initial_pose_received_condition_bt_node
-    - nav2_goal_updated_condition_bt_node
-    - nav2_globally_updated_goal_condition_bt_node
-    - nav2_is_path_valid_condition_bt_node
-    - nav2_reinitialize_global_localization_service_bt_node
-    - nav2_rate_controller_bt_node
-    - nav2_distance_controller_bt_node
-    - nav2_speed_controller_bt_node
-    - nav2_truncate_path_action_bt_node
-    - nav2_pipeline_sequence_bt_node
-    - nav2_round_robin_node_bt_node
-    - nav2_recovery_node_bt_node
-    - nav2_single_trigger_bt_node
-    - nav2_goal_updater_node_bt_node
-    - nav2_path_expirator_node_bt_node
-    - nav2_transform_available_condition_bt_node
-    - nav2_time_expired_condition_bt_node
-    - nav2_path_longer_on_approach_bt_node
-    - nav2_wait_for_transform_action_bt_node
 
 controller_server:
   ros__parameters:
-    use_sim_time: False
-    controller_frequency: 10.0
+    use_sim_time: False   # [수정]
+    controller_frequency: 20.0
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.5
     min_theta_velocity_threshold: 0.001
@@ -105,29 +71,30 @@ controller_server:
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.25
       yaw_goal_tolerance: 0.25
-
-    # [중요] 아커만 주행용 컨트롤러 (Regulated Pure Pursuit)
+    
+    # 아커만 조향(자동차) 전용 컨트롤러 설정
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-      desired_linear_vel: 0.4
+      desired_linear_vel: 1.5
       lookahead_dist: 0.6
       min_lookahead_dist: 0.3
       max_lookahead_dist: 0.9
       lookahead_time: 1.5
-      rotate_to_heading_at_start: false  # 제자리 회전 금지!
-      rotate_to_heading_min_angle: 0.785
-      use_velocity_scaled_lookahead_dist: true
+      
+      rotate_to_heading_at_start: false
+      use_rotate_to_heading: false
+      allow_reversing: true
+      min_turning_radius: 0.3
+
+      transform_tolerance: 0.5  # [수정] TF 지연 에러 방지를 위해 0.1 -> 0.5로 증가
+      use_velocity_scaled_lookahead_dist: false
       min_approach_linear_velocity: 0.05
       approach_velocity_scaling_dist: 0.6
-      use_collision_detection: true
       max_allowed_time_to_collision_up_to_carrot: 1.0
-      use_regulated_linear_velocity_scaling: true
-      use_cost_regulated_linear_velocity_scaling: false
-      regulated_linear_scaling_min_radius: 0.9
-      regulated_linear_scaling_min_speed: 0.25
-      use_rotate_to_heading: false       # 제자리 회전 금지!
-      allow_reversing: false             # 일단 후진 금지 (안전하게)
-      transform_tolerance: 0.1
+      use_collision_detection: true
+      max_linear_accel: 2.5
+      max_robot_pose_search_dist: 10.0
+      use_interpolation: true
 
 local_costmap:
   local_costmap:
@@ -136,17 +103,17 @@ local_costmap:
       publish_frequency: 2.0
       global_frame: odom
       robot_base_frame: base_link
-      use_sim_time: False
+      use_sim_time: False   # [수정]
       rolling_window: true
       width: 3
       height: 3
       resolution: 0.05
-      robot_radius: 0.15  # 차량 크기에 맞게 조절 (미터 단위)
+      robot_radius: 0.25
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0
-        inflation_radius: 0.35
+        inflation_radius: 0.55
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -165,7 +132,8 @@ local_costmap:
           data_type: "LaserScan"
           raytrace_max_range: 3.0
           obstacle_max_range: 2.5
-          inf_is_valid: true
+      static_layer:
+        map_subscribe_transient_local: True
 
 global_costmap:
   global_costmap:
@@ -174,8 +142,8 @@ global_costmap:
       publish_frequency: 1.0
       global_frame: map
       robot_base_frame: base_link
-      use_sim_time: False
-      robot_radius: 0.15
+      use_sim_time: False   # [수정]
+      robot_radius: 0.25
       resolution: 0.05
       track_unknown_space: true
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
@@ -191,24 +159,23 @@ global_costmap:
           data_type: "LaserScan"
           raytrace_max_range: 3.0
           obstacle_max_range: 2.5
-          inf_is_valid: true
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0
-        inflation_radius: 0.35
+        inflation_radius: 0.55
 
 map_server:
   ros__parameters:
-    use_sim_time: False
-    yaml_filename: "map.yaml"
+    use_sim_time: False   # [수정]
+    yaml_filename: "my_map.yaml"
 
 planner_server:
   ros__parameters:
-    expected_planner_frequency: 5.0
-    use_sim_time: False
+    expected_planner_frequency: 20.0
+    use_sim_time: False   # [수정]
     planner_plugins: ["GridBased"]
     GridBased:
       plugin: "nav2_navfn_planner/NavfnPlanner"
@@ -230,9 +197,4 @@ recoveries_server:
       plugin: "nav2_recoveries/Wait"
     global_frame: odom
     robot_base_frame: base_link
-    transform_timeout: 0.1
-    use_sim_time: false
-    simulate_ahead_time: 2.0
-    max_rotational_vel: 1.0
-    min_rotational_vel: 0.4
-    rotational_acc_lim: 3.2
+    use_sim_time: False   # [수정]

@@ -35,12 +35,12 @@ try:
     print("Servo motors initialized.")
     print("Starting servo control test...")
 
-    for i in range(80, 120):
+    for i in range(60, 160):
         kit.servo[0].angle = i
         print(f"Servo 0 angle: {i}")
         time.sleep(0.05)
 
-    for i in range(120, 80, -1):
+    for i in range(160, 60, -1):
         kit.servo[0].angle = i
         print(f"Servo 0 angle: {i}")
         time.sleep(0.05)
