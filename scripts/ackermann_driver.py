@@ -31,7 +31,7 @@ class AckermannDriver(Node):
 
         # === [중요] 조향 각도 설정 ===
         self.center_angle = 100.0   # 정면 (바퀴 정렬)
-        self.max_turn_angle = 50.0  # 최대 꺾임 각도 (도 단위)
+        self.max_turn_angle = 35.0  # 최대 꺾임 각도 (도 단위)
         
         # 현재 상태 저장 변수 (JointState 발행용)
         self.current_steering_angle_rad = 0.0
