@@ -12,18 +12,18 @@ import time
 # ================= 설정 =================
 MQTT_BROKER = "i14a402.p.ssafy.io"
 MQTT_PORT = 8183
-CAR_ID = "car01"  # 차량 ID (고유값 설정)
+CAR_ID = "car01"  # 차량 ID
 
 # 토픽 정의
 TOPIC_CMD = f"autowing_car/v1/{CAR_ID}/cmd"
 
-# [중요] 노드 이름 <-> 좌표 매핑 (Rviz에서 딴 좌표를 여기에 입력하세요)
-# 예: 서버가 "E_GATE_TW1"을 보내면 로봇은 (1.5, 0.5)로 이동합니다.
+# [중요] 노드 이름 <-> 좌표 매핑
+# (사용자님이 주신 좌표로 설정했습니다)
 WAYPOINT_MAP = {
     "E_GATE_TW1": {"x": -0.037, "y": -1.243, "yaw": -1.50},
     "E_TW1_RWY":  {"x": -0.072, "y": -0.744, "yaw": -1.50},
-    "HOME":       {"x": -0.024, "y": 0.032, "yaw": -1.56}
-    # ... 나머지 노드들도 추가 필요
+    "HOME":       {"x": -0.024, "y": 0.032,  "yaw": -1.56}
+    # 필요시 추가...
 }
 # =======================================
 
@@ -31,6 +31,7 @@ class MissionClient(Node):
     def __init__(self):
         super().__init__('mission_client_node')
         
+        # Nav2 네비게이터 초기화
         self.navigator = BasicNavigator()
         
         # MQTT 설정
@@ -57,48 +58,68 @@ class MissionClient(Node):
 
             self.get_logger().info(f"📩 Command Received: {cmd}")
 
+            # 1. 경로 주행 (여러 지점 순차 이동)
             if cmd == "START_MISSION":
                 path_names = data.get("path", [])
-                self.start_mission(path_names)
+                if path_names:
+                    threading.Thread(target=self.execute_waypoints, args=(path_names,)).start()
+                else:
+                    self.get_logger().warn("⚠️ Path is empty!")
+
+            # 2. 단일 지점 이동 (MOVE 명령어 추가됨!)
+            elif cmd == "MOVE":
+                target_name = data.get("target")
+                if target_name:
+                    threading.Thread(target=self.execute_waypoints, args=([target_name],)).start()
+                else:
+                    self.get_logger().warn("⚠️ Target is missing for MOVE command")
             
-            elif cmd == "PAUSE":
+            # 3. 정지
+            elif cmd == "PAUSE" or cmd == "STOP":
                 self.navigator.cancelTask()
-                self.get_logger().warn("⏸ Mission Paused (Task Canceled)")
-            
-            elif cmd == "RESUME":
-                self.get_logger().warn("▶ Resume not fully implemented (Re-send START_MISSION)")
+                self.get_logger().warn("⏸  Mission Paused (Task Canceled)")
                 
         except Exception as e:
             self.get_logger().error(f"Message Parse Error: {e}")
 
-    def start_mission(self, path_names):
-        """ 노드 이름 리스트를 받아서 연속 주행 시작 """
-        goals = []
+    def execute_waypoints(self, path_names):
+        """ 실제 Nav2에게 이동 명령을 내리는 함수 """
         
+        # === [핵심 수정] Nav2가 준비될 때까지 대기 ===
+        # 이 부분이 없으면 로봇이 명령을 받고도 무시합니다.
+        if not self.navigator.lifecycleStartup():
+             self.get_logger().info("Waiting for Nav2 to become active...")
+             self.navigator.waitUntilNav2Active()
+        # ==========================================
+
+        goals = []
         for name in path_names:
             if name in WAYPOINT_MAP:
                 coords = WAYPOINT_MAP[name]
                 pose = self.create_pose(coords['x'], coords['y'], coords.get('yaw', 0.0))
                 goals.append(pose)
-                self.get_logger().info(f"➕ Added Waypoint: {name} ({coords['x']}, {coords['y']})")
+                self.get_logger().info(f"➕ Added Goal: {name}")
             else:
                 self.get_logger().error(f"❌ Unknown Waypoint: {name}")
 
-        if goals:
-            # 별도 스레드에서 주행 시작 (블로킹 방지)
-            threading.Thread(target=self.execute_waypoints, args=(goals,)).start()
+        if not goals:
+            self.get_logger().warn("⚠️ No valid goals found!")
+            return
 
-    def execute_waypoints(self, goals):
+        # [중요] 주행 시작 명령 전송
+        self.get_logger().info(f"🚀 Moving to {len(goals)} waypoints...")
         self.navigator.followWaypoints(goals)
         
+        # 주행 상태 모니터링 (블로킹)
         while not self.navigator.isTaskComplete():
+            # feedback = self.navigator.getFeedback()
             time.sleep(1.0)
             
         result = self.navigator.getResult()
         if result == TaskResult.SUCCEEDED:
             self.get_logger().info("🏁 Mission Complete!")
         else:
-            self.get_logger().warn("⚠️ Mission Canceled or Failed")
+            self.get_logger().warn(f"⚠️ Mission Failed or Canceled: {result}")
 
     def create_pose(self, x, y, yaw):
         goal_pose = PoseStamped()
@@ -107,12 +128,12 @@ class MissionClient(Node):
         goal_pose.pose.position.x = float(x)
         goal_pose.pose.position.y = float(y)
         
-        # Euler -> Quaternion
-        q_x, q_y, q_z, q_w = self.euler_to_quaternion(0, 0, yaw)
-        goal_pose.pose.orientation.x = q_x
-        goal_pose.pose.orientation.y = q_y
-        goal_pose.pose.orientation.z = q_z
-        goal_pose.pose.orientation.w = q_w
+        # Euler -> Quaternion 변환
+        q = self.euler_to_quaternion(0, 0, yaw)
+        goal_pose.pose.orientation.x = q[0]
+        goal_pose.pose.orientation.y = q[1]
+        goal_pose.pose.orientation.z = q[2]
+        goal_pose.pose.orientation.w = q[3]
         return goal_pose
 
     def euler_to_quaternion(self, roll, pitch, yaw):
