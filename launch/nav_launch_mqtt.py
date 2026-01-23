@@ -13,7 +13,7 @@ def generate_launch_description():
     nav2_share = get_package_share_directory('nav2_bringup')
 
     # 1. 맵 및 파라미터 파일 경로 설정
-    map_file_path = os.path.join(pkg_share, 'maps', 'my_map.yaml')
+    map_file_path = os.path.join(os.path.expanduser('~'), 'maps2', 'my_map.yaml')
     params_file_path = os.path.join(pkg_share, 'config', 'nav2_params.yaml')
     
     # 2. Launch Arguments (실행 시 변경 가능하도록 설정)
