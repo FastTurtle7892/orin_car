@@ -31,7 +31,7 @@ class AckermannDriver(Node):
 
         # === [중요] 조향 각도 설정 ===
         self.center_angle = 100.0   # 정면 (바퀴 정렬)
-        self.max_turn_angle = 35.0  # 최대 꺾임 각도 (도 단위)
+        self.max_turn_angle = 50.0  # 최대 꺾임 각도 (도 단위)
         
         # 현재 상태 저장 변수 (JointState 발행용)
         self.current_steering_angle_rad = 0.0
@@ -109,8 +109,8 @@ class AckermannDriver(Node):
         
         # URDF(robot.xacro)에 정의된 관절 이름과 정확히 일치해야 합니다.
         msg.name = [
-            'front_left_steer_joint',  # 앞바퀴 조향 (좌)
-            'front_right_steer_joint', # 앞바퀴 조향 (우)
+            'front_left_steering_joint',  # 앞바퀴 조향 (좌)
+            'front_right_steering_joint', # 앞바퀴 조향 (우)
             'front_left_wheel_joint',  # 앞바퀴 회전
             'front_right_wheel_joint', # 앞바퀴 회전
             'rear_left_wheel_joint',   # 뒷바퀴 회전

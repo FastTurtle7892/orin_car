@@ -1,6 +1,12 @@
 amcl:
   ros__parameters:
     use_sim_time: False   # [수정] 실제 로봇이므로 False
+    set_initial_pose: true   # 초기 위치 설정을 켜줍니다 (기본값 false일 수 있음)
+    initial_pose:
+      x: -0.061
+      y: 1.084
+      z: 0.0
+      yaw: -1.54   # 로봇이 바라보는 방향 (라디안)
     alpha1: 0.2
     alpha2: 0.2
     alpha3: 0.2
