@@ -13,6 +13,9 @@ find_package(rclpy REQUIRED)
 
 install(PROGRAMS
   scripts/ackermann_driver.py
+  mqtt/mqtt_bridge.py
+  mqtt/state_manager.py
+  mqtt/mission_client.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -23,6 +26,7 @@ install(DIRECTORY
   config
   urdf
   maps
+  mqtt
   DESTINATION share/${PROJECT_NAME}
 )
 
