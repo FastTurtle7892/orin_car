@@ -1,17 +1,38 @@
 amcl:
   ros__parameters:
-    use_sim_time: False   # [수정] 실제 로봇이므로 False
-#    set_initial_pose: true   # 초기 위치 설정을 켜줍니다 (기본값 false일 수 있음)
-#    initial_pose:
-#      x: -0.061
-#      y: 1.084
-#      z: 0.0
-#      yaw: -1.54   # 로봇이 바라보는 방향 (라디안)
-    alpha1: 0.2
-    alpha2: 0.2
-    alpha3: 0.2
-    alpha4: 0.2
+    use_sim_time: False
+    
+    # 1. 초기 위치 설정 (고정)
+    set_initial_pose: true
+    initial_pose:
+      x: 0.014
+      y: 0.196
+      z: 0.0
+      yaw: 0.049
+    
+    # 2. 초기 위치 분산 (작게 설정하여 위치 확신)
+    initial_cov_xx: 0.1
+    initial_cov_yy: 0.1
+    initial_cov_aa: 0.05
+
+    # 3. 위치 갱신 최소 조건 (정지 시 맵 튀는 현상 방지)
+    # 25cm 이동하거나 11도(0.2rad) 회전해야만 위치를 다시 계산함
+    update_min_d: 0.25
+    update_min_a: 0.2
+
+    # 4. 오도메트리 노이즈 허용치 (바퀴 미끄러짐 대응)
+    alpha1: 0.8
+    alpha2: 0.8
+    alpha3: 0.8
+    alpha4: 0.8
     alpha5: 0.2
+
+    # 5. 입자 필터 설정 (안정성 강화)
+    min_particles: 500
+    max_particles: 3000
+    resample_interval: 2
+
+    # 기타 기본 설정
     base_frame_id: "base_link"
     beam_skip_distance: 0.5
     beam_skip_error_threshold: 0.9
@@ -23,19 +44,16 @@ amcl:
     laser_max_beams: 60
     laser_model_type: "likelihood_field"
     max_beams: 60
-    max_particles: 2000
-    min_particles: 500
     odom_frame_id: "odom"
     pf_err: 0.05
     pf_z: 0.99
     recovery_alpha_fast: 0.0
     recovery_alpha_slow: 0.0
-    resample_interval: 1
     robot_model_type: "nav2_amcl::DifferentialMotionModel"
     save_pose_rate: 0.5
     sigma_hit: 0.2
     tf_broadcast: true
-    transform_tolerance: 2.0  # [수정] 네트워크 지연 고려하여 1.0 -> 2.0으로 증가
+    transform_tolerance: 2.0
     updater_error: 0.2
     updater_free: 0.4
     z_hit: 0.5
@@ -46,7 +64,7 @@ amcl:
 
 bt_navigator:
   ros__parameters:
-    use_sim_time: False   # [수정]
+    use_sim_time: False
     global_frame: map
     robot_base_frame: base_link
     odom_topic: /odom
@@ -55,7 +73,7 @@ bt_navigator:
 
 controller_server:
   ros__parameters:
-    use_sim_time: False   # [수정]
+    use_sim_time: False
     controller_frequency: 20.0
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.5
@@ -78,11 +96,20 @@ controller_server:
       xy_goal_tolerance: 0.25
       yaw_goal_tolerance: 0.25
     
-    # 아커만 조향(자동차) 전용 컨트롤러 설정
+    # 아커만 조향 컨트롤러 (튜닝 완료)
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-      desired_linear_vel: 1.5
-      lookahead_dist: 0.6
+      
+      # [주행 속도] 안정적인 주행을 위해 속도와 가속도 제한
+      desired_linear_vel: 0.5
+      max_linear_accel: 0.8
+      max_linear_decel: 0.8
+      
+      # [조향 각도] 50도 회전을 위해 최소 회전 반경 대폭 축소 (0.3 -> 0.15)
+      min_turning_radius: 0.15
+      
+      # [경로 추종] 코너링 부드럽게
+      lookahead_dist: 0.5
       min_lookahead_dist: 0.3
       max_lookahead_dist: 0.9
       lookahead_time: 1.5
@@ -90,15 +117,12 @@ controller_server:
       rotate_to_heading_at_start: false
       use_rotate_to_heading: false
       allow_reversing: true
-      min_turning_radius: 0.3
-
-      transform_tolerance: 0.5  # [수정] TF 지연 에러 방지를 위해 0.1 -> 0.5로 증가
+      transform_tolerance: 0.5
       use_velocity_scaled_lookahead_dist: false
       min_approach_linear_velocity: 0.05
       approach_velocity_scaling_dist: 0.6
       max_allowed_time_to_collision_up_to_carrot: 1.0
       use_collision_detection: true
-      max_linear_accel: 2.5
       max_robot_pose_search_dist: 10.0
       use_interpolation: true
 
@@ -109,17 +133,20 @@ local_costmap:
       publish_frequency: 2.0
       global_frame: odom
       robot_base_frame: base_link
-      use_sim_time: False   # [수정]
+      use_sim_time: False
       rolling_window: true
       width: 3
       height: 3
       resolution: 0.05
-      robot_radius: 0.25
+      
+      # [충돌 방지] 로봇 반경을 조금 더 작게 잡아서 좁은 곳 통과 유리하게
+      robot_radius: 0.20
+      
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.55
+        cost_scaling_factor: 5.0
+        inflation_radius: 0.4
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -148,8 +175,8 @@ global_costmap:
       publish_frequency: 1.0
       global_frame: map
       robot_base_frame: base_link
-      use_sim_time: False   # [수정]
-      robot_radius: 0.25
+      use_sim_time: False
+      robot_radius: 0.20
       resolution: 0.05
       track_unknown_space: true
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
@@ -170,18 +197,18 @@ global_costmap:
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.55
+        cost_scaling_factor: 5.0
+        inflation_radius: 0.4
 
 map_server:
   ros__parameters:
-    use_sim_time: False   # [수정]
+    use_sim_time: False
     yaml_filename: "my_map.yaml"
 
 planner_server:
   ros__parameters:
     expected_planner_frequency: 20.0
-    use_sim_time: False   # [수정]
+    use_sim_time: False
     planner_plugins: ["GridBased"]
     GridBased:
       plugin: "nav2_navfn_planner/NavfnPlanner"
@@ -203,4 +230,4 @@ recoveries_server:
       plugin: "nav2_recoveries/Wait"
     global_frame: odom
     robot_base_frame: base_link
-    use_sim_time: False   # [수정]
+    use_sim_time: False

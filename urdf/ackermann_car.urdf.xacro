@@ -1,19 +1,20 @@
 <?xml version="1.0"?>
 <robot name="ackermann_car" xmlns:xacro="http://ros.org/wiki/xacro">
 
-  <xacro:property name="chassis_length" value="0.25"/> <xacro:property name="chassis_width" value="0.14"/>  <xacro:property name="chassis_height" value="0.05"/> <xacro:property name="wheel_radius" value="0.03"/>   <xacro:property name="wheel_width" value="0.02"/>    <xacro:property name="wheel_offset_x" value="0.09"/> <xacro:property name="wheel_offset_y" value="0.08"/> <xacro:property name="lidar_radius" value="0.035"/>
+  <xacro:property name="chassis_length" value="0.25"/>
+  <xacro:property name="chassis_width" value="0.14"/>
+  <xacro:property name="chassis_height" value="0.05"/>
+  <xacro:property name="wheel_radius" value="0.03"/>
+  <xacro:property name="wheel_width" value="0.02"/>
+  <xacro:property name="wheel_offset_x" value="0.09"/>
+  <xacro:property name="wheel_offset_y" value="0.08"/>
+  <xacro:property name="lidar_radius" value="0.035"/>
   <xacro:property name="lidar_height" value="0.04"/>
   <xacro:property name="lidar_z_offset" value="${chassis_height/2 + lidar_height/2}"/>
 
-  <material name="blue">
-    <color rgba="0 0 0.8 1"/>
-  </material>
-  <material name="black">
-    <color rgba="0 0 0 1"/>
-  </material>
-  <material name="white">
-    <color rgba="1 1 1 1"/>
-  </material>
+  <material name="blue"><color rgba="0 0 0.8 1"/></material>
+  <material name="black"><color rgba="0 0 0 1"/></material>
+  <material name="white"><color rgba="1 1 1 1"/></material>
 
   <link name="base_link">
     <visual>
@@ -45,7 +46,8 @@
           <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
         </geometry>
         <material name="black"/>
-        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/> </visual>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+      </visual>
     </link>
     <joint name="${name}_wheel_joint" type="continuous">
       <parent link="base_link"/>
@@ -55,6 +57,9 @@
     </joint>
   </xacro:macro>
 
+  <xacro:wheel name="rear_left"  x="${-wheel_offset_x}" y="${wheel_offset_y}"/>
+  <xacro:wheel name="rear_right" x="${-wheel_offset_x}" y="${-wheel_offset_y}"/>
+
   <link name="front_left_steering_link">
     <visual><geometry><sphere radius="0.01"/></geometry></visual>
   </link>
@@ -62,7 +67,8 @@
     <parent link="base_link"/>
     <child link="front_left_steering_link"/>
     <origin xyz="${wheel_offset_x} ${wheel_offset_y} ${-chassis_height/2}" rpy="0 0 0"/>
-    <axis xyz="0 0 1"/> <limit lower="-0.6" upper="0.6" effort="10" velocity="1"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-0.6" upper="0.6" effort="10" velocity="1"/>
   </joint>
   <link name="front_left_wheel">
      <visual>
@@ -102,16 +108,13 @@
     <axis xyz="0 1 0"/>
   </joint>
 
-
-  <xacro:wheel name="rear_left"  x="${-wheel_offset_x}" y="${wheel_offset_y}"/>
-  <xacro:wheel name="rear_right" x="${-wheel_offset_x}" y="${-wheel_offset_y}"/>
-
   <link name="laser_frame">
     <visual>
       <geometry>
         <cylinder radius="${lidar_radius}" length="${lidar_height}"/>
       </geometry>
-      <material name="black"/> <origin xyz="0 0 0" rpy="0 0 0"/>
+      <material name="black"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
     <collision>
       <geometry>
@@ -128,4 +131,3 @@
   </joint>
 
 </robot>
-
