@@ -14,7 +14,7 @@ def generate_launch_description():
 
     # 1. 경로 설정
     # (주의) map_file_path는 젯슨 나노의 홈 디렉토리(~/maps2)를 바라보게 설정했습니다.
-    default_map_path = os.path.join(os.path.expanduser('~'), 'maps2', 'my_map.yaml')
+    default_map_path = os.path.join(os.path.expanduser('~'), 'maps', 'my_map.yaml')
     nav2_params_path = os.path.join(pkg_share, 'config', 'nav2_params.yaml')
     
     xacro_file = os.path.join(pkg_share, 'urdf', 'ackermann_car.urdf.xacro')
