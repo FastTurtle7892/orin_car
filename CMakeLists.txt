@@ -13,6 +13,8 @@ find_package(rclpy REQUIRED)
 
 install(PROGRAMS
   scripts/ackermann_driver.py
+#scripts/mqtt_nav_bridge.py
+  scripts/scan_locker.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

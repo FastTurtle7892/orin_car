@@ -30,6 +30,23 @@ MONITOR_INTERVAL = 1.0
 # 2. 목표 지점 설정
 # ==========================================
 
+CURVE_POINT_1 = {
+
+   'x': 0.46,
+   'y': -0.28,
+   'z': 0.0,
+   'yaw': 0.0
+}
+
+CURVE_POINT_2 = {
+
+   'x': 1.12,
+   'y': 0.85,
+   'z': 0.0,
+   'yaw': 1.57
+}
+
+
 # [목표 1] 테스트 지점
 TEST_GOAL = {
     'x': 0.49,
@@ -40,10 +57,10 @@ TEST_GOAL = {
 
 # [목표 2] 초기 위치 (원점)
 ORIGIN_GOAL = {
-    'x': 0.014,
-    'y': 0.196,
+    'x': 0.046,
+    'y': 0.911,
     'z': 0.0,
-    'yaw': 0.0
+    'yaw': -1.55
 }
 
 # [목표 3] 경유지 1 (User Provided)
@@ -67,7 +84,10 @@ GOAL_MAP = {
     "TEST_GOAL": TEST_GOAL,
     "ORIGIN_GOAL": ORIGIN_GOAL,
     "WAYPOINT_1": WAYPOINT_1,
-    "WAYPOINT_2": WAYPOINT_2
+    "WAYPOINT_2": WAYPOINT_2,
+    "CURVE_POINT_1": CURVE_POINT_1,
+	"CURVE_POINT_2": CURVE_POINT_2,
+    "UTURN_SEQ": [CURVE_POINT_1, CURVE_POINT_2]
 }
 
 def euler_from_quaternion(x, y, z, w):
@@ -157,7 +177,14 @@ class MqttNavBridge(Node):
                 # 경로 리스트를 순회하며 큐에 추가
                 for name in path:
                     if name in GOAL_MAP:
-                        self.goal_queue.append(GOAL_MAP[name])
+                        target = GOAL_MAP[name]
+                        
+                        # 중요: 만약 target이 리스트(UTURN_SEQ 처럼 여러 개)라면 -> extend 사용
+                        if isinstance(target, list):
+                            self.goal_queue.extend(target)
+                        # 만약 target이 딕셔너리(TEST_GOAL 처럼 한 개)라면 -> append 사용
+                        else:
+                            self.goal_queue.append(target)
                     else:
                         self.get_logger().warn(f"Unknown Goal Name: {name}")
 
@@ -189,7 +216,7 @@ class MqttNavBridge(Node):
 
     def send_goal_to_nav2(self, target_data):
         # 서버 준비 대기
-        if not self._action_client.wait_for_server(timeout_sec=5.0):
+        if not self._action_client.wait_for_server(timeout_sec=20.0):
              self.get_logger().warn("Nav2 Server is still not ready after 5s wait.")
              return
 

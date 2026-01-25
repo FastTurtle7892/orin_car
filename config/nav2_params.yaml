@@ -9,6 +9,11 @@ amcl:
       y: 0.196
       z: 0.0
       yaw: 0.0
+      
+#      x: -0.324
+#     y: 0.833
+#     z: 0.0
+#     yaw: -1.53
     
     # 초기 분산 (작을수록 초기 위치를 확신함)
     initial_cov_xx: 0.02
@@ -16,15 +21,15 @@ amcl:
     initial_cov_aa: 0.02
 
     # 갱신 주기 단축 (5cm 이동 or 3도 회전마다 갱신)
-    update_min_d: 0.05
-    update_min_a: 0.05
+    update_min_d: 0.01
+    update_min_a: 0.01
 
     # 오도메트리 노이즈 설정
-    alpha1: 0.2
-    alpha2: 0.2
-    alpha3: 0.2
-    alpha4: 0.2
-    alpha5: 0.2
+    alpha1: 1.0
+    alpha2: 1.0
+    alpha3: 1.0
+    alpha4: 1.0
+    alpha5: 1.0
 
     # 입자 필터 설정
     min_particles: 1000
@@ -219,7 +224,7 @@ recoveries_server:
     costmap_topic: local_costmap/costmap_raw
     footprint_topic: local_costmap/published_footprint
     cycle_frequency: 10.0
-    recovery_plugins: ["spin", "backup", "wait"]
+    recovery_plugins: ["backup", "wait"]
     spin:
       plugin: "nav2_recoveries/Spin"
     backup:
