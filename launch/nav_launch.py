@@ -36,14 +36,6 @@ def generate_launch_description():
         }]
     )
 
-    # 2. [추가] Scan Locker Node (정지 시 스캔 고정 -> 오도메트리 떨림 방지)
-    # 반드시 scripts/scan_locker.py 가 존재하고 실행 권한(chmod +x)이 있어야 합니다.
-    node_scan_locker = Node(
-        package='orin_car',
-        executable='scan_locker.py',
-        output='screen'
-    )
-
     # 3. [수정] RF2O Laser Odometry (입력 토픽 변경: /scan -> /scan_for_odom)
     node_rf2o = Node(
         package='rf2o_laser_odometry',
@@ -51,7 +43,7 @@ def generate_launch_description():
         name='rf2o_laser_odometry',
         output='screen',
         parameters=[{
-            'laser_scan_topic': '/scan_for_odom', # scan_locker가 주는 안정된 데이터 사용
+            'laser_scan_topic': '/scan', # scan_locker가 주는 안정된 데이터 사용
             'odom_topic': '/odom',
             'publish_tf': True,
             'base_frame_id': 'base_link',
@@ -78,13 +70,6 @@ def generate_launch_description():
         output='screen'
     )
 
-    # 6. [추가] MQTT Nav Bridge (통신 및 미션 수행)
-#    node_mqtt_bridge = Node(
-#       package='orin_car',
-#       executable='mqtt_nav_bridge.py',
-#       output='screen'
-#    )
-
     # 7. Nav2 Bringup
     nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(nav2_share, 'launch', 'bringup_launch.py')),
@@ -100,10 +85,8 @@ def generate_launch_description():
         map_arg,
         params_arg,
         node_robot_state_publisher,
-        node_scan_locker,      # 추가됨
         node_rf2o,
         node_ydlidar,
         node_ackermann_driver,
-#       node_mqtt_bridge,      # 추가됨
         nav2_launch
     ])
