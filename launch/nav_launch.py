@@ -20,7 +20,7 @@ def generate_launch_description():
     map_arg = DeclareLaunchArgument('map', default_value=default_map_path)
     params_arg = DeclareLaunchArgument('params_file', default_value=nav2_params_path)
 
-    # 1. Robot State Publisher (설정 강화)
+    # 1. Robot State Publisher (네트워크 최적화: 15Hz)
     doc = xacro.process_file(xacro_file)
     robot_description_config = {'robot_description': doc.toxml()}
     
@@ -28,10 +28,9 @@ def generate_launch_description():
         package='robot_state_publisher',
         executable='robot_state_publisher',
         output='screen',
-        # [핵심] use_sim_time을 False로 명시하고, TF 발행 빈도를 높임
         parameters=[robot_description_config, {
             'use_sim_time': False,
-            'publish_frequency': 50.0 
+            'publish_frequency': 15.0  # 고정된 URDF이므로 15Hz면 충분하고 안전함
         }]
     )
 
@@ -62,7 +61,7 @@ def generate_launch_description():
         namespace='/'
     )
 
-    # 4. Ackermann Driver
+    # 4. Ackermann Driver (Hardware Only)
     node_ackermann_driver = Node(
         package='orin_car',
         executable='ackermann_driver.py',

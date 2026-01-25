@@ -2,65 +2,53 @@ amcl:
   ros__parameters:
     use_sim_time: False
     
-    # 1. 초기 위치 설정 (고정)
+    # [사용자 요청] 초기 위치 설정
     set_initial_pose: true
     initial_pose:
       x: 0.014
       y: 0.196
       z: 0.0
-      yaw: 0.049
+      yaw: 0.0
     
-    # 2. 초기 위치 분산 (작게 설정하여 위치 확신)
+    # 초기 분산 (작을수록 초기 위치를 확신함)
     initial_cov_xx: 0.1
     initial_cov_yy: 0.1
     initial_cov_aa: 0.05
 
-    # 3. 위치 갱신 최소 조건 (정지 시 맵 튀는 현상 방지)
-    # 25cm 이동하거나 11도(0.2rad) 회전해야만 위치를 다시 계산함
-    update_min_d: 0.25
-    update_min_a: 0.2
+    # [수정] 갱신 주기 단축 (5cm 이동 or 3도 회전마다 갱신 -> 빠른 보정)
+    update_min_d: 0.05
+    update_min_a: 0.05
 
-    # 4. 오도메트리 노이즈 허용치 (바퀴 미끄러짐 대응)
-    alpha1: 0.8
-    alpha2: 0.8
-    alpha3: 0.8
-    alpha4: 0.8
+    # [수정] 오도메트리 노이즈 감소 (0.8 -> 0.2 : 오도메트리가 꽤 정확하다고 가정하고 입자를 덜 퍼뜨림)
+    alpha1: 0.2
+    alpha2: 0.2
+    alpha3: 0.2
+    alpha4: 0.2
     alpha5: 0.2
 
-    # 5. 입자 필터 설정 (안정성 강화)
-    min_particles: 500
+    # [수정] 입자 개수 증가 (정확도 향상)
+    min_particles: 1000
     max_particles: 3000
-    resample_interval: 2
+    resample_interval: 1
 
-    # 기타 기본 설정
     base_frame_id: "base_link"
-    beam_skip_distance: 0.5
-    beam_skip_error_threshold: 0.9
-    beam_skip_threshold: 0.3
-    do_beamskip: false
     global_frame_id: "map"
+    odom_frame_id: "odom"
+    scan_topic: scan
+    
+    tf_broadcast: true
+    transform_tolerance: 1.0
+    
+    # [수정] Lidar 모델 튜닝 (벽이랑 스캔이 안 맞을 때 강력하게 보정)
+    laser_max_beams: 100       # 빔 개수 늘림
+    laser_model_type: "likelihood_field"
+    z_hit: 0.9                 # (중요) 스캔 데이터 신뢰도 대폭 상향 (0.5 -> 0.9)
+    z_rand: 0.05               # 랜덤 노이즈 무시
+    z_max: 0.05
+    z_short: 0.05
+    sigma_hit: 0.2
     lambda_short: 0.1
     laser_likelihood_max_dist: 2.0
-    laser_max_beams: 60
-    laser_model_type: "likelihood_field"
-    max_beams: 60
-    odom_frame_id: "odom"
-    pf_err: 0.05
-    pf_z: 0.99
-    recovery_alpha_fast: 0.0
-    recovery_alpha_slow: 0.0
-    robot_model_type: "nav2_amcl::DifferentialMotionModel"
-    save_pose_rate: 0.5
-    sigma_hit: 0.2
-    tf_broadcast: true
-    transform_tolerance: 2.0
-    updater_error: 0.2
-    updater_free: 0.4
-    z_hit: 0.5
-    z_max: 0.05
-    z_rand: 0.5
-    z_short: 0.05
-    scan_topic: scan
 
 bt_navigator:
   ros__parameters:
@@ -83,35 +71,33 @@ controller_server:
     goal_checker_plugins: ["general_goal_checker"] 
     controller_plugins: ["FollowPath"]
 
-    # Progress Checker
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
       required_movement_radius: 0.5
       movement_time_allowance: 10.0
     
-    # Goal Checker
     general_goal_checker:
       stateful: True
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.25
       yaw_goal_tolerance: 0.25
     
-    # 아커만 조향 컨트롤러 (튜닝 완료)
+    # 아커만 조향 컨트롤러 설정
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
       
-      # [주행 속도] 안정적인 주행을 위해 속도와 가속도 제한
-      desired_linear_vel: 0.5
-      max_linear_accel: 0.8
-      max_linear_decel: 0.8
+      # 속도 설정 (0.8 m/s)
+      desired_linear_vel: 0.8
+      max_linear_accel: 1.2
+      max_linear_decel: 1.2
       
-      # [조향 각도] 50도 회전을 위해 최소 회전 반경 대폭 축소 (0.3 -> 0.15)
-      min_turning_radius: 0.15
+      # [중요] 회전 반경 최적화 (약 40도 조향 사용)
+      min_turning_radius: 0.18
       
-      # [경로 추종] 코너링 부드럽게
-      lookahead_dist: 0.5
-      min_lookahead_dist: 0.3
-      max_lookahead_dist: 0.9
+      # 조향 부드러움 설정
+      lookahead_dist: 0.6
+      min_lookahead_dist: 0.4
+      max_lookahead_dist: 1.0
       lookahead_time: 1.5
       
       rotate_to_heading_at_start: false
@@ -121,7 +107,6 @@ controller_server:
       use_velocity_scaled_lookahead_dist: false
       min_approach_linear_velocity: 0.05
       approach_velocity_scaling_dist: 0.6
-      max_allowed_time_to_collision_up_to_carrot: 1.0
       use_collision_detection: true
       max_robot_pose_search_dist: 10.0
       use_interpolation: true
@@ -139,14 +124,14 @@ local_costmap:
       height: 3
       resolution: 0.05
       
-      # [충돌 방지] 로봇 반경을 조금 더 작게 잡아서 좁은 곳 통과 유리하게
-      robot_radius: 0.20
+      # 로봇 크기 (15cm)
+      robot_radius: 0.15
       
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 5.0
-        inflation_radius: 0.4
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.45
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -176,7 +161,10 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_link
       use_sim_time: False
-      robot_radius: 0.20
+      
+      # 로봇 크기 (15cm)
+      robot_radius: 0.15
+      
       resolution: 0.05
       track_unknown_space: true
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
@@ -197,8 +185,8 @@ global_costmap:
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 5.0
-        inflation_radius: 0.4
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.45
 
 map_server:
   ros__parameters:
