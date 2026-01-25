@@ -4,7 +4,7 @@
   <xacro:property name="chassis_length" value="0.27"/> <xacro:property name="chassis_width" value="0.12"/>  <xacro:property name="chassis_height" value="0.08"/> <xacro:property name="lidar_radius" value="0.035"/>
   <xacro:property name="lidar_height" value="0.03"/>
   
-  <xacro:property name="lidar_x_offset" value="-0.07"/> 
+  <xacro:property name="lidar_x_offset" value="-0.06"/> 
   
   <xacro:property name="lidar_z_offset" value="${chassis_height/2 + lidar_height/2}"/>
   <xacro:property name="ground_clearance" value="0.03"/>

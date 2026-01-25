@@ -2,7 +2,7 @@ amcl:
   ros__parameters:
     use_sim_time: False
     
-    # [사용자 요청] 초기 위치 설정
+    # [위치 추정] 초기 위치 (사용자 환경에 맞게 수정)
     set_initial_pose: true
     initial_pose:
       x: 0.014
@@ -11,22 +11,22 @@ amcl:
       yaw: 0.0
     
     # 초기 분산 (작을수록 초기 위치를 확신함)
-    initial_cov_xx: 0.1
-    initial_cov_yy: 0.1
-    initial_cov_aa: 0.05
+    initial_cov_xx: 0.02
+    initial_cov_yy: 0.02
+    initial_cov_aa: 0.02
 
-    # [수정] 갱신 주기 단축 (5cm 이동 or 3도 회전마다 갱신 -> 빠른 보정)
+    # 갱신 주기 단축 (5cm 이동 or 3도 회전마다 갱신)
     update_min_d: 0.05
     update_min_a: 0.05
 
-    # [수정] 오도메트리 노이즈 감소 (0.8 -> 0.2 : 오도메트리가 꽤 정확하다고 가정하고 입자를 덜 퍼뜨림)
+    # 오도메트리 노이즈 설정
     alpha1: 0.2
     alpha2: 0.2
     alpha3: 0.2
     alpha4: 0.2
     alpha5: 0.2
 
-    # [수정] 입자 개수 증가 (정확도 향상)
+    # 입자 필터 설정
     min_particles: 1000
     max_particles: 3000
     resample_interval: 1
@@ -39,11 +39,11 @@ amcl:
     tf_broadcast: true
     transform_tolerance: 1.0
     
-    # [수정] Lidar 모델 튜닝 (벽이랑 스캔이 안 맞을 때 강력하게 보정)
-    laser_max_beams: 100       # 빔 개수 늘림
+    # Lidar 모델 튜닝
+    laser_max_beams: 100
     laser_model_type: "likelihood_field"
-    z_hit: 0.9                 # (중요) 스캔 데이터 신뢰도 대폭 상향 (0.5 -> 0.9)
-    z_rand: 0.05               # 랜덤 노이즈 무시
+    z_hit: 0.9
+    z_rand: 0.05
     z_max: 0.05
     z_short: 0.05
     sigma_hit: 0.2
@@ -76,25 +76,23 @@ controller_server:
       required_movement_radius: 0.5
       movement_time_allowance: 10.0
     
+    # [수정됨] 도착 판정 기준 강화 (정밀 주차)
     general_goal_checker:
       stateful: True
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.25
-      yaw_goal_tolerance: 0.25
+      xy_goal_tolerance: 0.10   # 25cm -> 10cm (더 정확하게)
+      yaw_goal_tolerance: 0.1   # 각도 오차도 줄임
     
-    # 아커만 조향 컨트롤러 설정
+    # 아커만 조향 컨트롤러
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
       
-      # 속도 설정 (0.8 m/s)
       desired_linear_vel: 0.8
-      max_linear_accel: 1.2
-      max_linear_decel: 1.2
+      max_linear_accel: 0.5
+      max_linear_decel: 0.5
       
-      # [중요] 회전 반경 최적화 (약 40도 조향 사용)
-      min_turning_radius: 0.18
+      min_turning_radius: 0.32
       
-      # 조향 부드러움 설정
       lookahead_dist: 0.6
       min_lookahead_dist: 0.4
       max_lookahead_dist: 1.0
@@ -104,7 +102,7 @@ controller_server:
       use_rotate_to_heading: false
       allow_reversing: true
       transform_tolerance: 0.5
-      use_velocity_scaled_lookahead_dist: false
+      use_velocity_scaled_lookahead_dist: true
       min_approach_linear_velocity: 0.05
       approach_velocity_scaling_dist: 0.6
       use_collision_detection: true
@@ -123,15 +121,13 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05
-      
-      # 로봇 크기 (15cm)
       robot_radius: 0.15
       
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.45
+        cost_scaling_factor: 5.0
+        inflation_radius: 0.25
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -161,10 +157,7 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_link
       use_sim_time: False
-      
-      # 로봇 크기 (15cm)
       robot_radius: 0.15
-      
       resolution: 0.05
       track_unknown_space: true
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
@@ -185,24 +178,41 @@ global_costmap:
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.45
+        cost_scaling_factor: 5.0
+        inflation_radius: 0.25
 
 map_server:
   ros__parameters:
     use_sim_time: False
     yaml_filename: "my_map.yaml"
 
+# [수정됨] 경로 계획기: NavfnPlanner -> SmacPlannerHybrid (자동차용)
 planner_server:
   ros__parameters:
     expected_planner_frequency: 20.0
     use_sim_time: False
     planner_plugins: ["GridBased"]
     GridBased:
-      plugin: "nav2_navfn_planner/NavfnPlanner"
-      tolerance: 0.5
-      use_astar: false
+      plugin: "nav2_smac_planner/SmacPlannerHybrid"
+      downsample_costmap: false
+      tolerance: 0.25
       allow_unknown: true
+      max_iterations: 1000000
+      max_on_approach_iterations: 1000
+      max_planning_time: 2.0
+      
+      # [핵심] 자동차 물리 모델 (후진 가능)
+      motion_model_for_search: "REEDS_SHEPP"  # 전진+후진 경로 생성
+      angle_quantization_bins: 72             # 5도 단위 정밀도
+      minimum_turning_radius: 0.32            # 회전 반경 (m)
+      reverse_penalty: 2.0                    # 후진 억제 가중치
+      change_penalty: 0.05                    # 방향 전환 페널티
+      non_straight_penalty: 1.2               # 곡선 주행 페널티
+      cost_travel_multiplier: 2.0
+      lookup_table_size: 20.0
+      cache_obstacle_heuristic: false
+      debug_visualizations: false
+      smooth_path: true
 
 recoveries_server:
   ros__parameters:
