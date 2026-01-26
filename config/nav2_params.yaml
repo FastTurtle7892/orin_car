@@ -5,10 +5,10 @@ amcl:
     # [위치 추정] 초기 위치 (사용자 환경에 맞게 수정)
     set_initial_pose: true
     initial_pose:
-      x: 0.014
-      y: 0.196
+      x: -1.111
+      y: 0.201
       z: 0.0
-      yaw: 0.0
+      yaw: -1.57
       
 #      x: -0.324
 #     y: 0.833
