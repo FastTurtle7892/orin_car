@@ -85,8 +85,8 @@ controller_server:
     general_goal_checker:
       stateful: True
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.20   # 25cm -> 10cm (더 정확하게)
-      yaw_goal_tolerance: 0.2   # 각도 오차도 줄임
+      xy_goal_tolerance: 0.10   # 25cm -> 10cm (더 정확하게)
+      yaw_goal_tolerance: 0.05   # 각도 오차도 줄임
     
     # 아커만 조향 컨트롤러
     FollowPath:
@@ -96,12 +96,12 @@ controller_server:
       max_linear_accel: 0.5
       max_linear_decel: 0.5
       
-      min_turning_radius: 0.32
+      min_turning_radius: 1.1
       
-      lookahead_dist: 0.6
+      lookahead_dist: 1.5
       min_lookahead_dist: 0.4
       max_lookahead_dist: 1.0
-      lookahead_time: 1.5
+      lookahead_time: 2.0
       
       rotate_to_heading_at_start: false
       use_rotate_to_heading: false
@@ -209,10 +209,10 @@ planner_server:
       # [핵심] 자동차 물리 모델 (후진 가능)
       motion_model_for_search: "REEDS_SHEPP"  # 전진+후진 경로 생성
       angle_quantization_bins: 72             # 5도 단위 정밀도
-      minimum_turning_radius: 0.32            # 회전 반경 (m)
+      minimum_turning_radius: 1.1           # 회전 반경 (m)
       reverse_penalty: 2.0                    # 후진 억제 가중치
       change_penalty: 0.05                    # 방향 전환 페널티
-      non_straight_penalty: 1.2               # 곡선 주행 페널티
+      non_straight_penalty: 2.0              # 곡선 주행 페널티
       cost_travel_multiplier: 2.0
       lookup_table_size: 20.0
       cache_obstacle_heuristic: false

@@ -26,21 +26,18 @@ MONITOR_INTERVAL = 1.0
 # ==========================================
 # 2. 목표 지점 및 초기 위치 설정
 # ==========================================
-# [1] 시작 위치 (이 값을 초기 위치로 사용합니다)
 ORIGIN_GOAL = { 'x': -1.111, 'y': 0.201, 'z': 0.0, 'yaw': -1.57 }
-NODE_1_COORD = { 'x': -0.957, 'y': -0.707, 'z': 0.0, 'yaw': -1.57 }
-NODE_2_WAYPOINT_1 = { 'x': -0.915, 'y': -1.76, 'z': 0.0, 'yaw': -0.92 }
-NODE_2_WAYPOINT_2 = { 'x': -0.333, 'y': -2.39, 'z': 0.0, 'yaw': 0.0 }
-NODE_2_WAYPOINT_3 = { 'x': 0.842, 'y': -1.81, 'z': 0.0, 'yaw': 1.08 }
-NODE_2_COORD = { 'x': 1.15, 'y': -0.384,'z': 0.0, 'yaw': 1.57 }
+NODE_1_COORD = { 'x': -1.111, 'y': -0.707, 'z': 0.0, 'yaw': -1.57 }
+NODE_2_COORD = { 'x': -1.111, 'y': -1.615, 'z': 0.0, 'yaw': -1.57 }
+NODE_3_COORD = { 'x': 1.15, 'y': -1.615, 'z': 0.0, 'yaw': 1.57 }
+NODE_3_WAYPOINT = { 'x': -0.195, 'y': -2.39, 'z': 0.0, 'yaw': 0.0 }
 
 GOAL_MAP = {
     "NODE_1_COORD": NODE_1_COORD,
-	"NODE_2_WAYPOINT_1": NODE_2_WAYPOINT_1,
-	"NODE_2_WAYPOINT_2": NODE_2_WAYPOINT_2,
-	"NODE_2_WAYPOINT_3": NODE_2_WAYPOINT_3,
-	"NODE_2_COORD": NODE_2_COORD,
-    "NODE_2_TOTAL": [NODE_2_WAYPOINT_1, NODE_2_WAYPOINT_2, NODE_2_WAYPOINT_3, NODE_2_COORD],
+    "NODE_2_COORD": NODE_2_COORD,
+    "NODE_3_COORD": NODE_3_COORD,
+    "NODE_3_WAYPOINT": NODE_3_WAYPOINT,
+    "NODE_3_TOTAL": [NODE_3_WAYPOINT, NODE_3_COORD],
     "ORIGIN_GOAL": ORIGIN_GOAL
 }
 
@@ -61,20 +58,25 @@ class MqttNavBridge(Node):
     def __init__(self):
         super().__init__('mqtt_nav_bridge')
         
-        # [추가됨] 초기 위치(Initial Pose)를 설정하기 위한 퍼블리셔 생성
+        # [수정] 런치 파일에서 초기 위치를 받기 위한 파라미터 선언
+        self.declare_parameter('init_x', -1.111)
+        self.declare_parameter('init_y', 0.201)
+        self.declare_parameter('init_yaw', -1.57)
+        
+        # 퍼블리셔 생성
         self.initial_pose_pub = self.create_publisher(PoseWithCovarianceStamped, 'initialpose', 10)
 
         # 1. Nav2 Action Client 설정
         self._action_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
         
-        # [수정] Nav2 서버 상태를 관리하는 변수 및 타이머
+        # Nav2 서버 상태 확인
         self.is_nav2_ready = False
         self.nav2_check_timer = self.create_timer(1.0, self.check_nav2_server_ready)
         self.get_logger().info("⏳ Waiting for Nav2 Server to come online...")
 
-        # [중요] 프로그램 시작 시, 자동으로 초기 위치를 쏴줍니다!
-        self.get_logger().info("Setting Initial Pose in 2 seconds...")
-        self.timer_init = self.create_timer(2.0, self.set_initial_pose_once)
+        # [중요] 런치 파일 실행 후 Nav2가 켜질 때까지 충분히 대기 (10초) 후 초기화
+        self.get_logger().info("⏳ 10초 뒤에 런치 파일에서 설정한 위치로 초기화합니다...")
+        self.timer_init = self.create_timer(10.0, self.set_initial_pose_once)
 
         # 2. 로봇 상태 및 주행 큐
         self.current_pose = None
@@ -110,42 +112,35 @@ class MqttNavBridge(Node):
         self.timer = self.create_timer(MONITOR_INTERVAL, self.publish_periodic_status)
         self.get_logger().info(f"Monitoring Active (Interval: {MONITOR_INTERVAL}s)")
 
-    # [추가] 주기적으로 Nav2 서버 연결 상태를 확인하는 함수
     def check_nav2_server_ready(self):
         if self._action_client.server_is_ready():
-            self.get_logger().info("✅ ========================================")
             self.get_logger().info("✅ [알림] Nav2 액션 서버 연결 성공!")
-            self.get_logger().info("✅ 이제 로봇이 이동 명령을 수행할 수 있습니다.")
-            self.get_logger().info("✅ ========================================")
-            
             self.is_nav2_ready = True
-            self.nav2_check_timer.cancel() # 연결됐으므로 타이머 종료
+            self.nav2_check_timer.cancel()
         else:
-            # 아직 연결 안 됨 (로그가 너무 많이 뜨지 않게 주석 처리하거나 필요시 사용)
             pass
 
-    # [수정] 자동으로 초기 위치를 쏘는 함수 (대기 로직 제거)
     def set_initial_pose_once(self):
-        self.timer_init.cancel() # 한 번만 실행하고 타이머 끔
+        self.timer_init.cancel()
+        
+        # [수정] 파라미터로 받은 좌표값 사용
+        init_x = self.get_parameter('init_x').value
+        init_y = self.get_parameter('init_y').value
+        init_yaw = self.get_parameter('init_yaw').value
         
         pose_msg = PoseWithCovarianceStamped()
         pose_msg.header.frame_id = 'map'
         pose_msg.header.stamp = self.get_clock().now().to_msg()
         
-        # ORIGIN_GOAL 값을 사용
-        pose_msg.pose.pose.position.x = ORIGIN_GOAL['x']
-        pose_msg.pose.pose.position.y = ORIGIN_GOAL['y']
+        pose_msg.pose.pose.position.x = float(init_x)
+        pose_msg.pose.pose.position.y = float(init_y)
         pose_msg.pose.pose.position.z = 0.0
         
-        # Yaw -> Quaternion 변환
-        yaw = ORIGIN_GOAL['yaw']
-        pose_msg.pose.pose.orientation.z = math.sin(yaw / 2.0)
-        pose_msg.pose.pose.orientation.w = math.cos(yaw / 2.0)
+        pose_msg.pose.pose.orientation.z = math.sin(init_yaw / 2.0)
+        pose_msg.pose.pose.orientation.w = math.cos(init_yaw / 2.0)
         
         self.initial_pose_pub.publish(pose_msg)
-        self.get_logger().info(f"✅ Initial Pose Published: ({ORIGIN_GOAL['x']}, {ORIGIN_GOAL['y']})")
-        
-        # 참고: 여기서 wait_for_nav2를 호출하지 않고, check_nav2_server_ready 타이머가 알아서 처리하도록 둡니다.
+        self.get_logger().info(f"✅ Initial Pose Published: ({init_x}, {init_y})")
 
     def pose_callback(self, msg):
         self.current_pose = msg.pose.pose
@@ -184,8 +179,9 @@ class MqttNavBridge(Node):
                     self.process_next_goal()
 
             elif cmd == "GO_HOME":
-                self.goal_queue = [ORIGIN_GOAL]
-                self.process_next_goal()
+                # GO_HOME 시에도 필요하다면 초기 파라미터 위치로 갈 수 있음
+                # self.goal_queue = [ORIGIN_GOAL] 
+                pass
 
             elif cmd == "PAUSE":
                 pass 
@@ -204,10 +200,8 @@ class MqttNavBridge(Node):
         self.send_goal_to_nav2(next_goal)
 
     def send_goal_to_nav2(self, target_data):
-        # [수정] Nav2 서버가 준비되었는지 확인
         if not self.is_nav2_ready:
-             self.get_logger().warn("⛔ [경고] 아직 Nav2 서버가 준비되지 않았습니다! 명령을 무시합니다.")
-             # 실패 시 큐 복구 로직이 필요하다면 여기에 추가 (지금은 그냥 스킵)
+             self.get_logger().warn("⛔ [경고] Nav2 서버 준비 안됨. 명령 무시.")
              return
 
         goal_msg = NavigateToPose.Goal()
@@ -254,7 +248,6 @@ class MqttNavBridge(Node):
             time.sleep(1.0)
             self.process_next_goal()
             self.robot_status = "IDLE"
-#self.goal_queue = []
 
     def publish_periodic_status(self):
         x = 0.0
@@ -272,9 +265,6 @@ class MqttNavBridge(Node):
             
             yaw_rad = euler_from_quaternion(qx, qy, qz, qw)
             heading_deg = math.degrees(yaw_rad)
-        
-        # 터미널에 현재 상태 출력 (디버깅용)
-        # self.get_logger().info(f"Status - x:{x:.2f}, y:{y:.2f}, Battery:{self.battery_level}%")
 
         monitor_data = {
             "carId": CAR_ID,
