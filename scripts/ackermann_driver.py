@@ -23,7 +23,7 @@ class AckermannDriver(Node):
         super().__init__('ackermann_driver')
 
         # 1. 차량 하드웨어 스펙 (URDF와 일치해야 함)
-        self.wheelbase = 0.27        # 축간거리 (m)
+        self.wheelbase = 0.145        # 축간거리 (m)
         self.max_steering_deg = 40.0 # 최대 조향각 (도)
         
         # 2. 서보/모터 설정
