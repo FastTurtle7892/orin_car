@@ -16,7 +16,6 @@ LOCATIONS = {
     'NODE_1_COORD':            ['-1.111', '-0.707', '-1.57'], # 노드 1
     'NODE_2_COORD':            ['-1.111', '-1.615', '-1.57'], # 노드 2
     'NODE_3_COORD':            ['1.15',   '-1.615', '1.57'],  # 노드 3
-    'NODE_3_WAYPOINT':       ['-0.195', '-2.39',  '0.0'],     
 }
 
 def launch_setup(context, *args, **kwargs):
