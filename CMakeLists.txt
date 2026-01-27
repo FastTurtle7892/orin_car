@@ -14,6 +14,7 @@ find_package(rclpy REQUIRED)
 install(PROGRAMS
   scripts/ackermann_driver.py
   scripts/mqtt_nav_bridge_ssafy.py
+  scripts/mqtt_nav_bridge_ssafy_total.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
