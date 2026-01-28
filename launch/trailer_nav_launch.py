@@ -91,13 +91,6 @@ def generate_launch_description():
         output='screen'
     )
 
-    node_mqtt_follower = Node(
-        package=pkg_name,
-        executable='mqtt_path_follower.py',
-        name='mqtt_path_follower',
-        output='screen'
-    )
-
     # [Nav2 실행]
     nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -112,16 +105,10 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        # 디버깅용 로그 출력
-        LogInfo(msg=f"✅ Map File Path: {map_file}"),
-        LogInfo(msg=f"✅ Nav2 Params Path: {nav2_params_file}"),
-        LogInfo(msg=f"✅ URDF File Path: {xacro_file}"),
-        
         node_robot_state_publisher,
         node_joint_state_publisher,
         node_ydlidar,
         node_rf2o,
         node_ackermann,
-        node_mqtt_follower,
         nav2_launch
     ])
