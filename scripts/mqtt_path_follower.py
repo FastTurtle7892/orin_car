@@ -18,7 +18,7 @@ MQTT_BROKER = "i14a402.p.ssafy.io"
 MQTT_PORT = 8183
 CAR_ID = "car01"
 TOPIC_CMD = f"autowing_car/v1/{CAR_ID}/cmd"
-PATH_FOLDER = "/home/ubuntu/trailer_paths"  # JSON 파일들이 저장될 폴더 (절대경로 권장)
+PATH_FOLDER = os.path.expanduser("~/trailer_paths")  # JSON 파일들이 저장될 폴더 (절대경로 권장)
 
 class MqttPathFollower(Node):
     def __init__(self):
