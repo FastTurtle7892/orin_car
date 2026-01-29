@@ -18,6 +18,8 @@ install(PROGRAMS
   scripts/mission_master.py
   scripts/docking_ai.py
   scripts/gesture_ai.py
+  scripts/ackermann_driver_stm.py
+  scripts/test_docking_drive.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
