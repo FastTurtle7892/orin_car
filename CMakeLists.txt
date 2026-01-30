@@ -15,11 +15,6 @@ install(PROGRAMS
   scripts/ackermann_driver.py
   scripts/mqtt_nav_bridge_ssafy.py
   scripts/mqtt_path_follower.py
-  scripts/mission_master.py
-  scripts/docking_ai.py
-  scripts/gesture_ai.py
-  scripts/ackermann_driver_stm.py
-  scripts/test_docking_drive.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
