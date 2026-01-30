@@ -9,22 +9,18 @@ def generate_launch_description():
     pkg_name = 'orin_car'
     pkg_share = get_package_share_directory(pkg_name)
 
-    # 1. 기본 주행 시스템 (LiDAR, Nav2 등)
+    # 1. 기본 주행 시스템 (LiDAR, Nav2, Driver 등)
     base_system = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_share, 'launch', 'trailer_nav_launch.py')
         )
     )
 
-    # 2. 마스터 컨트롤러 (동적 카메라 제어 기능 탑재)
-    master_controller = Node(
-        package=pkg_name,
-        executable='master_controller_dynamic.py', 
-        name='master_controller',
-        output='screen'
-    )
+    # [수정] 마스터 컨트롤러는 따로 실행할 것이므로 여기서 제거함
+    # master_controller = Node(...) 
 
-    # 3. 기능 컨트롤러들
+    # 2. 기능 컨트롤러들 (도킹, 마샬링)
+    # 이들은 /system_mode 토픽을 기다리며 대기합니다.
     docking_controller = Node(
         package=pkg_name,
         executable='docking_controller_v2.py',
@@ -40,7 +36,7 @@ def generate_launch_description():
         parameters=[{'speed_fast': 0.25, 'speed_slow': 0.12, 'turn_angle': 0.5}]
     )
 
-    # 4. 웹 서버 (선택)
+    # 3. 웹 서버 (선택)
     web_server = Node(
         package='web_video_server',
         executable='web_video_server',
@@ -49,10 +45,10 @@ def generate_launch_description():
         parameters=[{'port': 8080}]
     )
 
-    # 컨트롤러들은 시스템 안정화 후 5초 뒤 실행
+    # 시스템 안정화 후 5초 뒤 컨트롤러 실행
     delayed_controllers = TimerAction(
         period=5.0,
-        actions=[master_controller, docking_controller, marshaller_controller]
+        actions=[docking_controller, marshaller_controller]
     )
 
     return LaunchDescription([
