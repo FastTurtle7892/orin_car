@@ -36,12 +36,15 @@ class AckermannDriver(Node):
         self.gripper_channel = 2    # 그리퍼
         
         # ==========================================
-        # [수정 완료] 테스트로 확인된 각도 값 적용
+        # [수정됨] test_gripper.py 기반 각도 설정
         # ==========================================
-        self.LIFT_UP = 180.0        # 초기/복귀 (올림)
-        self.LIFT_DOWN = 170.0      # 잡으러 갈 때 (내림)
-        self.GRIP_CLOSE = 100.0     # 잡기
-        self.GRIP_OPEN = 50.0       # 풀기 (초기)
+        # Lift: 70(위/초기) <-> 90(아래/작업)
+        self.LIFT_UP = 70.0         # 초기 상태 & 들어올리기
+        self.LIFT_DOWN = 90.0       # 내리기
+        
+        # Gripper: 120(열림/초기) <-> 50(닫힘/잡기)
+        self.GRIP_OPEN = 120.0      # 놓기/초기
+        self.GRIP_CLOSE = 50.0      # 잡기
         
         self.hardware_connected = False
         self.pca = None
@@ -68,7 +71,7 @@ class AckermannDriver(Node):
             self.pca = PCA9685(i2c)
             self.pca.frequency = 60
             
-            # [중요] 주소 0x60 적용
+            # [주소 설정] 0x60
             self.kit = ServoKit(channels=16, i2c=i2c, address=0x60)
             
             # [초기화] 
@@ -78,8 +81,9 @@ class AckermannDriver(Node):
             self.set_throttle_hardware(0.0)
             
             # 3. 리프트 & 그리퍼 초기 상태 (UP & OPEN)
-            # 테스트 코드의 초기 상태: Lift=180, Grip=50
+            # test_gripper.py: Lift=70, Gripper=120
             self.kit.servo[self.lift_channel].angle = self.LIFT_UP
+            time.sleep(0.5)
             self.kit.servo[self.gripper_channel].angle = self.GRIP_OPEN
             
             self.hardware_connected = True
@@ -100,7 +104,7 @@ class AckermannDriver(Node):
                 self.kit.servo[self.lift_channel].angle = self.LIFT_DOWN
             elif cmd == "GRIP":
                 self.kit.servo[self.gripper_channel].angle = self.GRIP_CLOSE
-            elif cmd == "RELEASE":
+            elif cmd == "RELEASE": # 혹시 나중에 쓸 경우를 대비
                 self.kit.servo[self.gripper_channel].angle = self.GRIP_OPEN
         except Exception as e:
             self.get_logger().error(f"Gripper Servo Error: {e}")
@@ -164,9 +168,9 @@ class AckermannDriver(Node):
             try:
                 self.set_throttle_hardware(0)
                 self.kit.servo[self.servo_channel].angle = self.center_angle
-                # 종료 시 안전하게 초기 위치(UP & OPEN)로 복귀
-                self.kit.servo[self.lift_channel].angle = self.LIFT_UP
-                self.kit.servo[self.gripper_channel].angle = self.GRIP_OPEN
+                # 종료 시 초기화 (안전을 위해)
+                # self.kit.servo[self.lift_channel].angle = self.LIFT_UP
+                # self.kit.servo[self.gripper_channel].angle = self.GRIP_OPEN
                 self.pca.deinit()
             except: pass
 

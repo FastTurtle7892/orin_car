@@ -15,6 +15,8 @@ install(PROGRAMS
   scripts/ackermann_driver.py
   scripts/mqtt_nav_bridge_ssafy.py
   scripts/mqtt_path_follower.py
+  scripts/docking_ai.py
+  scripts/docking_controller.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -26,5 +28,6 @@ install(DIRECTORY
   urdf
   DESTINATION share/${PROJECT_NAME}
 )
+
 
 ament_package()

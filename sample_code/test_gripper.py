@@ -26,26 +26,31 @@ def test_gripper():
 
     print("\n🚀 Starting Gripper Test Sequence (3 Loops)")
     
-    # 안전을 위해 처음엔 0도 등으로 튀지 않게 초기화 시도
-    # kit.servo[LIFT_CHANNEL].angle = LIFT_DOWN
-    # kit.servo[GRIPPER_CHANNEL].angle = GRIP_OPEN
 	
-    kit.servo[LIFT_CHANNEL].angle = 180
+    # 초기 상태
+    kit.servo[LIFT_CHANNEL].angle = 70
     time.sleep(3.0)
+    kit.servo[GRIPPER_CHANNEL].angle = 120
+    time.sleep(3.0)
+    print("초기 상태")
 
+    # 리프트 내리고 그리퍼로 잡고 리프트 올리기
+    kit.servo[LIFT_CHANNEL].angle = 90
+    time.sleep(1.0)
     kit.servo[GRIPPER_CHANNEL].angle = 50
-    time.sleep(3.0)  
+    time.sleep(1.0)
+    kit.servo[LIFT_CHANNEL].angle = 70
+    time.sleep(1.0)
+    print("grip 완료")
 
-    # 종료 시 안전하게 내려놓고 벌림
-    print("\n🏁 Test Finished. Resetting position...")
-    kit.servo[LIFT_CHANNEL].angle = 170
-    time.sleep(0.5)
-    kit.servo[GRIPPER_CHANNEL].angle = 100
-    time.sleep(0.5)
-
-    kit.servo[LIFT_CHANNEL].angle = 180
-    time.sleep(0.5)
-    kit.servo[GRIPPER_CHANNEL].angle = 50
+    # 리프트 내리고 그리퍼 풀고 리프트 올리기
+    kit.servo[LIFT_CHANNEL].angle = 90
+    time.sleep(1.0)
+    kit.servo[GRIPPER_CHANNEL].angle = 120
+    time.sleep(1.0)
+    kit.servo[LIFT_CHANNEL].angle = 70
+    time.sleep(1.0)
+    print("놓기 헤제")
 
     print("Done.")
 
