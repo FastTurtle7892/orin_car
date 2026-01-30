@@ -1,1 +1,0 @@
-/home/jetson/ros_ws/src/orin_car/scripts/mqtt_nav_bridge_ssafy.py

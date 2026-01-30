@@ -1,1 +1,0 @@
-geometry_msgs:joint_state_publisher:nav_msgs:python3-numpy:python3-opencv:rclcpp:rclpy:rf2o_laser_odometry:robot_state_publisher:rviz2:sensor_msgs:slam_toolbox:tf2:tf2_ros:usb_cam:web_video_server:ydlidar_ros2_driver

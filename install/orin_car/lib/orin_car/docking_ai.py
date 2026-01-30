@@ -1,1 +1,0 @@
-/home/jetson/ros_ws/src/orin_car/scripts/docking_ai.py
