@@ -17,6 +17,7 @@ install(PROGRAMS
   scripts/mqtt_path_follower.py
   scripts/docking_ai.py
   scripts/docking_controller.py
+  scripts/docking_controller_v2.py
   scripts/marshaller_controller.py
   scripts/gesture_ai.py
   DESTINATION lib/${PROJECT_NAME}

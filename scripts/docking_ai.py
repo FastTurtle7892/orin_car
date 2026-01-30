@@ -10,18 +10,15 @@ class DockingAI:
         self.TARGET_ID = 0
         self.target_dict = cv2.aruco.DICT_6X6_250 
         
-        # [거리 보정] (10~30cm 구간 최적화 값 유지)
+        # [거리 보정]
         self.DIST_SCALE = 1.45   
         self.DIST_OFFSET = -1.5  
-
-        # [Yaw 강제 보정 끄기] (대각선 왜곡 방지)
-        self.YAW_FIX_SCALE = 0.0 
 
         # ArUco 설정
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(self.target_dict)
         self.parameters = cv2.aruco.DetectorParameters()
 
-        # [튜닝] 작은 마커 인식 파라미터
+        # [튜닝] 파라미터
         self.parameters.minMarkerPerimeterRate = 0.015 
         self.parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX 
         self.parameters.adaptiveThreshWinSizeMin = 3
@@ -31,9 +28,7 @@ class DockingAI:
 
         self.detector = cv2.aruco.ArucoDetector(self.aruco_dict, self.parameters)
 
-        # ---------------------------------------------------------
         # [2] 캘리브레이션 결과
-        # ---------------------------------------------------------
         self.camera_matrix = np.array([
             [872.23558, 0.00000, 315.00614],
             [0.00000, 873.47815, 240.01070],
@@ -71,7 +66,6 @@ class DockingAI:
         
         corners, ids, rejected = self.detector.detectMarkers(gray)
         
-        # 데이터 구조에 'x_cm' 추가
         data = { "found": False, "id": -1, "dist_cm": 0.0, "x_cm": 0.0, "roll": 0.0, "pitch": 0.0, "yaw": 0.0, "center": (0, 0) }
 
         best_marker_idx = -1
@@ -96,7 +90,6 @@ class DockingAI:
                     final_rvec = rvecs[0]
                     final_tvec = tvecs[0]
 
-                    # Ambiguity 해결
                     if marker_id in self.tracking_data:
                         prev_rvec = self.tracking_data[marker_id]['rvec']
                         diff0 = abs(rvecs[0] - prev_rvec).sum()
@@ -105,7 +98,6 @@ class DockingAI:
                             final_rvec = rvecs[1]
                             final_tvec = tvecs[1]
                     
-                    # 스무딩
                     if marker_id in self.tracking_data:
                         last_rvec = self.tracking_data[marker_id]['rvec']
                         last_tvec = self.tracking_data[marker_id]['tvec']
@@ -124,14 +116,9 @@ class DockingAI:
         if found_target and best_marker_idx != -1:
             data["found"] = True
             
-            # 1. 거리(Z축) 계산 및 보정
             raw_dist = math.sqrt(best_tvec[0]**2 + best_tvec[1]**2 + best_tvec[2]**2)
             data["dist_cm"] = (raw_dist * self.DIST_SCALE) + self.DIST_OFFSET
-
-            # 2. 좌우 편차(X축) 계산 및 보정 (Offset은 제외하고 Scale만 적용)
-            # best_tvec[0]이 0이면 중앙, 음수면 왼쪽, 양수면 오른쪽
             data["x_cm"] = best_tvec[0][0] * self.DIST_SCALE
-
             data["roll"], data["pitch"], raw_yaw = self.euler_from_quaternion(best_rvec)
             
             cx = int(corners[best_marker_idx][0][:, 0].mean())
@@ -140,34 +127,30 @@ class DockingAI:
             data["yaw"] = raw_yaw 
 
             cv2.aruco.drawDetectedMarkers(frame, corners, ids)
-            cv2.drawFrameAxes(frame, self.camera_matrix, self.dist_coeffs, best_rvec, best_tvec, self.MARKER_SIZE * 1.5)
+            
+            # [수정] 경고 해결을 위해 축 길이를 줄임 (1.5 -> 0.8)
+            try:
+                cv2.drawFrameAxes(frame, self.camera_matrix, self.dist_coeffs, best_rvec, best_tvec, self.MARKER_SIZE * 0.8)
+            except:
+                pass # 그리기 실패해도 죽지 않도록 예외처리
 
             # UI
             box_width = 260
-            box_height = 190 # X값 표시를 위해 높이 약간 늘림
+            box_height = 190
             box_x, box_y = w - box_width, h - box_height
 
             overlay = frame.copy()
             cv2.rectangle(overlay, (box_x, box_y), (w, h), (0, 0, 0), -1)
             cv2.addWeighted(overlay, 0.6, frame, 0.4, 0, frame)
 
-            # =========================================================
-            # [최종 도킹 조건]
-            # 1. 거리: 8.5cm ± 1cm (7.5 ~ 9.5)
-            # 2. Yaw : 0도 ± 0.5도
-            # 3. X축 : 0cm ± 0.1cm (중앙 정렬)
-            # =========================================================
             dist_col = (0, 255, 0) if (7.5 <= data["dist_cm"] <= 9.5) else (0, 255, 255)
             yaw_col = (0, 255, 0) if abs(data["yaw"]) <= 0.5 else (0, 255, 255)
-            x_col    = (0, 255, 0) if abs(data["x_cm"]) <= 0.3 else (0, 255, 255) # X축 조건
+            x_col    = (0, 255, 0) if abs(data["x_cm"]) <= 0.3 else (0, 255, 255)
             
             font = cv2.FONT_HERSHEY_SIMPLEX
-            
             cv2.putText(frame, f"ID: {data['id']}", (box_x+10, box_y+30), font, 0.8, (0,255,255), 2)
             cv2.putText(frame, f"Dist : {data['dist_cm']:.1f} cm", (box_x+10, box_y+65), font, 0.7, dist_col, 2)
             cv2.putText(frame, f"X    : {data['x_cm']:.2f} cm", (box_x+10, box_y+135), font, 0.7, x_col, 2)
             cv2.putText(frame, f"Yaw  : {data['yaw']:.1f} deg", (box_x+10, box_y+100), font, 0.7, yaw_col, 2)
             
-            cv2.putText(frame, f"P:{data['pitch']:.1f} R:{data['roll']:.1f}", (box_x+10, box_y+165), font, 0.6, (200,200,200), 1)
-
         return data, frame
