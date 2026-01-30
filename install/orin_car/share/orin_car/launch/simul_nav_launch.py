@@ -1,0 +1,1 @@
+/home/jetson/ros_ws/src/orin_car/launch/simul_nav_launch.py

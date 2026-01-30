@@ -7,21 +7,20 @@ from std_msgs.msg import String
 from cv_bridge import CvBridge
 import cv2
 import time
-
-# docking_ai.py가 scripts 폴더 내에 있어야 합니다.
 from docking_ai import DockingAI
 
 class DockingController(Node):
     def __init__(self):
         super().__init__('docking_controller')
 
-        # [튜닝] 도킹 시작 거리 및 주행 속도
-        self.TARGET_DIST_CM = 35.0   
+        # ================= [설정] =================
+        self.TARGET_DIST_CM = 16.4   # 정지 및 잡기 시작 거리
         self.BASE_SPEED = -0.15      # 후진 속도
-        self.KP_STEER = 0.02         # 조향 감도
-
-        # 그리퍼 동작 대기 시간 (test_gripper.py 기준)
-        self.WAIT_TIME = 1.5         
+        self.KP_STEER = 0.02         
+        
+        # test_gripper.py 처럼 단계별로 충분히 기다립니다 (1.5초)
+        self.STEP_WAIT_TIME = 1.5    
+        # ==========================================
 
         self.create_subscription(Image, '/rear_camera/image_raw', self.image_callback, 10)
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
@@ -30,95 +29,113 @@ class DockingController(Node):
         self.bridge = CvBridge()
         self.docking_ai = DockingAI() 
         
-        self.is_docking_process = False 
+        # state_mode -> 0: 초기화 대기, 1: 도킹 주행, 2: 잡기 시퀀스, 99: 완료
+        self.state_mode = 0  
         self.docking_step = 0           
         self.docking_start_time = 0.0
+        self.last_log_time = 0
 
-        self.get_logger().info("✅ Docking Controller (Synced with test_gripper.py) Started")
+        # 시작 1초 후 초기 자세(INIT) 잡기
+        self.create_timer(1.0, self.initialize_pose_once)
+        self.get_logger().info("✅ Docking Controller Started")
+
+    def initialize_pose_once(self):
+        if self.state_mode == 0:
+            self.get_logger().info("🏁 [INIT] Pose Setup (UP & OPEN)")
+            self.publish_gripper("INIT") 
+            self.state_mode = 1 
+            # 초기화 동작 완료 대기
+            time.sleep(2.0)
 
     def image_callback(self, msg):
-        if self.is_docking_process:
+        # 1. 시퀀스 진행 중이면 영상 처리 중단하고 시퀀스 함수 실행
+        if self.state_mode == 2:
             self.run_gripper_sequence()
+            return
+        # 완료 상태면 아무것도 안 함
+        if self.state_mode == 99 or self.state_mode == 0:
             return
 
         try:
             cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
-        except Exception as e:
-            return
+        except: return
 
-        # 마커 분석
         result = self.docking_ai.process(cv_image)
-        
-        # IndexError 방지를 위한 안전 장치
-        if not isinstance(result, (list, tuple)) or len(result) < 4:
+        if not isinstance(result, (list, tuple)) or len(result) < 2:
             self.stop_robot()
             return
 
-        found = result[0]
-        
-        if found:
-            dist_cm = result[2]
-            x_cm = result[3]
+        data, frame = result
+        found = data.get("found", False)
 
-            if dist_cm is None or x_cm is None:
-                self.stop_robot()
-                return
+        if not found:
+            if time.time() - self.last_log_time > 2.0:
+                self.get_logger().info("👀 Searching...")
+                self.last_log_time = time.time()
+            self.stop_robot()
+            return
 
-            # 인식 성공 시 거리 정보를 로그로 찍습니다.
-            self.get_logger().info(f"Dist: {dist_cm:.1f}cm | X: {x_cm:.1f}")
+        dist_cm = data.get("dist_cm", 999.9)
+        x_cm = data.get("x_cm", 0.0)
+        if dist_cm is None: dist_cm = 999.9
 
-            # 목표 거리 도달 여부 확인
-            if dist_cm <= self.TARGET_DIST_CM:
-                self.get_logger().info("🛑 Target Reached! Starting Sequence...")
-                self.stop_robot()
-                self.is_docking_process = True
-                self.docking_start_time = time.time()
-                self.docking_step = 1 
-                return
-
-            # 후진 주행 명령 전송
+        # [거리 도달 체크]
+        if dist_cm <= self.TARGET_DIST_CM:
+            self.get_logger().info(f"🛑 [ARRIVED] Distance {dist_cm:.1f}cm <= {self.TARGET_DIST_CM}cm")
+            self.get_logger().info("🚀 Starting Grip Sequence!")
+            self.stop_robot()
+            
+            # 잡기 시퀀스 시작
+            self.state_mode = 2
+            self.docking_step = 1  
+            self.docking_start_time = time.time() 
+        else:
+            # 주행 (후진)
+            self.get_logger().info(f"🚗 Approaching... {dist_cm:.1f}cm")
             twist = Twist()
             twist.linear.x = self.BASE_SPEED
             twist.angular.z = self.KP_STEER * x_cm 
             self.cmd_vel_pub.publish(twist)
 
-        else:
-            # 마커가 보이지 않으면 로그를 남기지 않고 정지합니다.
-            self.stop_robot()
-
     def run_gripper_sequence(self):
-        """ test_gripper.py 동작 반영: DOWN -> GRIP -> UP """
+        """ 
+        [잡기 시퀀스]
+        1. Down (140)
+        2. Grip (120)
+        3. Up (160)
+        """
         elapsed = time.time() - self.docking_start_time
 
-        # 1단계: 리프트 내림 (DOWN)
+        # Step 1: 리프트 내리기
         if self.docking_step == 1:
-            if elapsed > 1.0:
-                self.get_logger().info("🔽 [1/3] Lift DOWN (90)")
+            if elapsed > 0.5: # 정지 후 약간 안정화
+                self.get_logger().info("🔽 [1/3] Lift DOWN (140)")
                 self.publish_gripper("DOWN")
-                self.docking_step = 2
-                self.docking_start_time = time.time()
+                self.next_step(2)
 
-        # 2단계: 잡기 (GRIP)
+        # Step 2: 내리기 완료 대기 -> 잡기
         elif self.docking_step == 2:
-            if elapsed > self.WAIT_TIME:
-                self.get_logger().info("✊ [2/3] Gripper GRIP (50)")
+            if elapsed > self.STEP_WAIT_TIME:
+                self.get_logger().info("✊ [2/3] Gripper CLOSE (120)")
                 self.publish_gripper("GRIP")
-                self.docking_step = 3
-                self.docking_start_time = time.time()
+                self.next_step(3)
 
-        # 3단계: 리프트 올림 (UP)
+        # Step 3: 잡기 완료 대기 -> 올리기
         elif self.docking_step == 3:
-            if elapsed > self.WAIT_TIME:
-                self.get_logger().info("🔼 [3/3] Lift UP (70)")
+            if elapsed > self.STEP_WAIT_TIME:
+                self.get_logger().info("🔼 [3/3] Lift UP (160)")
                 self.publish_gripper("UP")
-                self.docking_step = 4 
-                self.docking_start_time = time.time()
+                self.next_step(4)
 
-        # 최종 완료
+        # Step 4: 종료
         elif self.docking_step == 4:
-            if elapsed > self.WAIT_TIME:
-                self.get_logger().info("✅ Docking Complete")
-                self.is_docking_process = False 
+            if elapsed > self.STEP_WAIT_TIME:
+                self.get_logger().info("✅ Mission Complete! Object Secured.")
+                self.state_mode = 99 # 종료 상태로 전환 (더 이상 주행 안 함)
+
+    def next_step(self, next_step_num):
+        self.docking_step = next_step_num
+        self.docking_start_time = time.time()
 
     def stop_robot(self):
         self.cmd_vel_pub.publish(Twist())

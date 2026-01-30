@@ -1,0 +1,68 @@
+-- The C compiler identification is GNU 11.4.0
+-- The CXX compiler identification is GNU 11.4.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found ament_cmake: 1.3.12 (/opt/ros/humble/share/ament_cmake/cmake)
+-- Found Python3: /usr/bin/python3 (found version "3.10.12") found components: Interpreter 
+-- Override CMake install command with custom implementation using symlinks instead of copying resources
+-- Found rclcpp: 16.0.17 (/opt/ros/humble/share/rclcpp/cmake)
+-- Found rosidl_generator_c: 3.1.8 (/opt/ros/humble/share/rosidl_generator_c/cmake)
+-- Found rosidl_adapter: 3.1.8 (/opt/ros/humble/share/rosidl_adapter/cmake)
+-- Found rosidl_generator_cpp: 3.1.8 (/opt/ros/humble/share/rosidl_generator_cpp/cmake)
+-- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+-- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+-- Found rmw_implementation_cmake: 6.1.2 (/opt/ros/humble/share/rmw_implementation_cmake/cmake)
+-- Found rmw_fastrtps_cpp: 6.2.9 (/opt/ros/humble/share/rmw_fastrtps_cpp/cmake)
+-- Found OpenSSL: /usr/lib/aarch64-linux-gnu/libcrypto.so (found version "3.0.2")  
+-- Found FastRTPS: /opt/ros/humble/include  
+-- Using RMW implementation 'rmw_fastrtps_cpp' as default
+-- Looking for pthread.h
+-- Looking for pthread.h - found
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE  
+-- Found rclpy: 3.3.19 (/opt/ros/humble/share/rclpy/cmake)
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/jetson/ros_ws/src/orin_car/build/orin_car
+-- Install configuration: ""
+-- Execute custom install script
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/lib/orin_car/ackermann_driver.py
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/lib/orin_car/mqtt_nav_bridge_ssafy.py
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/lib/orin_car/mqtt_path_follower.py
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/lib/orin_car/docking_ai.py
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/lib/orin_car/docking_controller.py
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/launch/docking_test_launch.py
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/launch/final_launch.py
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/launch/nav_launch.py
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/launch/simul_nav_launch.py
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/launch/slam_launch.py
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/launch/slam_test_launch.py
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/launch/trailer_nav_launch.py
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/config/X4-Pro.yaml
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/config/nav2_params.yaml
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/config/slam_params.yaml
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/urdf/ackermann_car.urdf.xacro
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/ament_index/resource_index/package_run_dependencies/orin_car
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/ament_index/resource_index/parent_prefix_path/orin_car
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/environment/ament_prefix_path.sh
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/environment/ament_prefix_path.dsv
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/environment/path.sh
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/environment/path.dsv
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/local_setup.bash
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/local_setup.sh
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/local_setup.zsh
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/local_setup.dsv
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/package.dsv
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/ament_index/resource_index/packages/orin_car
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/cmake/orin_carConfig.cmake
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/cmake/orin_carConfig-version.cmake
+-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/package.xml

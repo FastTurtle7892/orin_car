@@ -1,0 +1,9 @@
+/home/jetson/ros_ws/src/orin_car/build/orin_car/CMakeFiles/uninstall.dir
+/home/jetson/ros_ws/src/orin_car/build/orin_car/CMakeFiles/orin_car_uninstall.dir
+/home/jetson/ros_ws/src/orin_car/build/orin_car/CMakeFiles/test.dir
+/home/jetson/ros_ws/src/orin_car/build/orin_car/CMakeFiles/edit_cache.dir
+/home/jetson/ros_ws/src/orin_car/build/orin_car/CMakeFiles/rebuild_cache.dir
+/home/jetson/ros_ws/src/orin_car/build/orin_car/CMakeFiles/list_install_components.dir
+/home/jetson/ros_ws/src/orin_car/build/orin_car/CMakeFiles/install.dir
+/home/jetson/ros_ws/src/orin_car/build/orin_car/CMakeFiles/install/local.dir
+/home/jetson/ros_ws/src/orin_car/build/orin_car/CMakeFiles/install/strip.dir

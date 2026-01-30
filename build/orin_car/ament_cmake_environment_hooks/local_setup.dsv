@@ -1,0 +1,2 @@
+source;share/orin_car/environment/ament_prefix_path.sh
+source;share/orin_car/environment/path.sh

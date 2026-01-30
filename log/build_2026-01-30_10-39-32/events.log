@@ -1,0 +1,117 @@
+[0.000000] (-) TimerEvent: {}
+[0.000756] (orin_car) JobQueued: {'identifier': 'orin_car', 'dependencies': OrderedDict()}
+[0.001516] (orin_car) JobStarted: {'identifier': 'orin_car'}
+[0.014137] (orin_car) JobProgress: {'identifier': 'orin_car', 'progress': 'cmake'}
+[0.015092] (orin_car) Command: {'cmd': ['/usr/bin/cmake', '/home/jetson/ros_ws/src/orin_car', '-DAMENT_CMAKE_SYMLINK_INSTALL=1', '-DCMAKE_INSTALL_PREFIX=/home/jetson/ros_ws/src/orin_car/install/orin_car'], 'cwd': '/home/jetson/ros_ws/src/orin_car/build/orin_car', 'env': OrderedDict([('LESSOPEN', '| /usr/bin/lesspipe %s'), ('USER', 'jetson'), ('SSH_CLIENT', '70.12.246.54 39490 22'), ('XDG_SESSION_TYPE', 'tty'), ('SHLVL', '1'), ('LD_LIBRARY_PATH', '/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/aarch64-linux-gnu:/opt/ros/humble/lib'), ('MOTD_SHOWN', 'pam'), ('HOME', '/home/jetson'), ('OLDPWD', '/home/jetson/ros_ws/src'), ('SSH_TTY', '/dev/pts/2'), ('JETSON_L4T', '36.4.7'), ('ROS_PYTHON_VERSION', '3'), ('JETSON_MODEL', 'NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super'), ('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/user/1000/bus'), ('COLCON_PREFIX_PATH', '/home/jetson/ros_ws/install'), ('ROS_DISTRO', 'humble'), ('LOGNAME', 'jetson'), ('JETSON_MODULE', 'NVIDIA Jetson Orin Nano (Developer kit)'), ('JETSON_SERIAL_NUMBER', '1422025002522'), ('_', '/usr/bin/colcon'), ('ROS_VERSION', '2'), ('XDG_SESSION_CLASS', 'user'), ('TERM', 'xterm-256color'), ('XDG_SESSION_ID', '8'), ('ROS_LOCALHOST_ONLY', '0'), ('PATH', '/home/jetson/.local/bin:/opt/ros/humble/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin'), ('FASTRTPS_DEFAULT_PROFILES_FILE', '/home/jetson/fastdds.xml'), ('XDG_RUNTIME_DIR', '/run/user/1000'), ('LANG', 'en_US.UTF-8'), ('RMW_IMPLEMENTATION', 'rmw_fastrtps_cpp'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('JETSON_SOC', 'tegra234'), ('ROS_DOMAIN_ID', '30'), ('AMENT_PREFIX_PATH', '/home/jetson/ros_ws/install/orin_car:/home/jetson/ros_ws/install/ydlidar_ros2_driver:/home/jetson/ros_ws/install/rf2o_laser_odometry:/opt/ros/humble'), ('SHELL', '/bin/bash'), ('LESSCLOSE', '/usr/bin/lesspipe %s %s'), ('JETSON_CUDA_ARCH_BIN', '8.7'), ('PWD', '/home/jetson/ros_ws/src/orin_car/build/orin_car'), ('LC_ALL', 'en_US.UTF-8'), ('SSH_CONNECTION', '70.12.246.54 39490 70.12.247.63 22'), ('XDG_DATA_DIRS', '/usr/share/gnome:/usr/local/share:/usr/share:/var/lib/snapd/desktop'), ('PYTHONPATH', '/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('COLCON', '1'), ('JETSON_JETPACK', ''), ('CMAKE_PREFIX_PATH', '/home/jetson/ros_ws/install/orin_car:/home/jetson/ros_ws/install/ydlidar_ros2_driver:/home/jetson/ros_ws/install/rf2o_laser_odometry:/opt/ros/humble'), ('JETSON_P_NUMBER', 'p3767-0005')]), 'shell': False}
+[0.099945] (-) TimerEvent: {}
+[0.105944] (orin_car) StdoutLine: {'line': b'-- The C compiler identification is GNU 11.4.0\n'}
+[0.200094] (-) TimerEvent: {}
+[0.240420] (orin_car) StdoutLine: {'line': b'-- The CXX compiler identification is GNU 11.4.0\n'}
+[0.267598] (orin_car) StdoutLine: {'line': b'-- Detecting C compiler ABI info\n'}
+[0.300275] (-) TimerEvent: {}
+[0.401531] (-) TimerEvent: {}
+[0.433007] (orin_car) StdoutLine: {'line': b'-- Detecting C compiler ABI info - done\n'}
+[0.458822] (orin_car) StdoutLine: {'line': b'-- Check for working C compiler: /usr/bin/cc - skipped\n'}
+[0.459993] (orin_car) StdoutLine: {'line': b'-- Detecting C compile features\n'}
+[0.461634] (orin_car) StdoutLine: {'line': b'-- Detecting C compile features - done\n'}
+[0.473960] (orin_car) StdoutLine: {'line': b'-- Detecting CXX compiler ABI info\n'}
+[0.501643] (-) TimerEvent: {}
+[0.602874] (-) TimerEvent: {}
+[0.661449] (orin_car) StdoutLine: {'line': b'-- Detecting CXX compiler ABI info - done\n'}
+[0.687890] (orin_car) StdoutLine: {'line': b'-- Check for working CXX compiler: /usr/bin/c++ - skipped\n'}
+[0.689458] (orin_car) StdoutLine: {'line': b'-- Detecting CXX compile features\n'}
+[0.691544] (orin_car) StdoutLine: {'line': b'-- Detecting CXX compile features - done\n'}
+[0.702863] (-) TimerEvent: {}
+[0.703928] (orin_car) StdoutLine: {'line': b'-- Found ament_cmake: 1.3.12 (/opt/ros/humble/share/ament_cmake/cmake)\n'}
+[0.803016] (-) TimerEvent: {}
+[0.903710] (-) TimerEvent: {}
+[1.004722] (-) TimerEvent: {}
+[1.105293] (-) TimerEvent: {}
+[1.206215] (-) TimerEvent: {}
+[1.307894] (-) TimerEvent: {}
+[1.408463] (-) TimerEvent: {}
+[1.456108] (orin_car) StdoutLine: {'line': b'-- Found Python3: /usr/bin/python3 (found version "3.10.12") found components: Interpreter \n'}
+[1.508608] (-) TimerEvent: {}
+[1.593050] (orin_car) StdoutLine: {'line': b'-- Override CMake install command with custom implementation using symlinks instead of copying resources\n'}
+[1.608735] (-) TimerEvent: {}
+[1.686765] (orin_car) StdoutLine: {'line': b'-- Found rclcpp: 16.0.17 (/opt/ros/humble/share/rclcpp/cmake)\n'}
+[1.708970] (-) TimerEvent: {}
+[1.779558] (orin_car) StdoutLine: {'line': b'-- Found rosidl_generator_c: 3.1.8 (/opt/ros/humble/share/rosidl_generator_c/cmake)\n'}
+[1.787606] (orin_car) StdoutLine: {'line': b'-- Found rosidl_adapter: 3.1.8 (/opt/ros/humble/share/rosidl_adapter/cmake)\n'}
+[1.801506] (orin_car) StdoutLine: {'line': b'-- Found rosidl_generator_cpp: 3.1.8 (/opt/ros/humble/share/rosidl_generator_cpp/cmake)\n'}
+[1.809008] (-) TimerEvent: {}
+[1.821556] (orin_car) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c\n'}
+[1.847572] (orin_car) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp\n'}
+[1.909126] (-) TimerEvent: {}
+[1.919131] (orin_car) StdoutLine: {'line': b'-- Found rmw_implementation_cmake: 6.1.2 (/opt/ros/humble/share/rmw_implementation_cmake/cmake)\n'}
+[1.923552] (orin_car) StdoutLine: {'line': b'-- Found rmw_fastrtps_cpp: 6.2.9 (/opt/ros/humble/share/rmw_fastrtps_cpp/cmake)\n'}
+[2.009300] (-) TimerEvent: {}
+[2.056237] (orin_car) StdoutLine: {'line': b'-- Found OpenSSL: /usr/lib/aarch64-linux-gnu/libcrypto.so (found version "3.0.2")  \n'}
+[2.109137] (orin_car) StdoutLine: {'line': b'-- Found FastRTPS: /opt/ros/humble/include  \n'}
+[2.109607] (-) TimerEvent: {}
+[2.174920] (orin_car) StdoutLine: {'line': b"-- Using RMW implementation 'rmw_fastrtps_cpp' as default\n"}
+[2.189055] (orin_car) StdoutLine: {'line': b'-- Looking for pthread.h\n'}
+[2.209765] (-) TimerEvent: {}
+[2.310409] (-) TimerEvent: {}
+[2.328540] (orin_car) StdoutLine: {'line': b'-- Looking for pthread.h - found\n'}
+[2.329657] (orin_car) StdoutLine: {'line': b'-- Performing Test CMAKE_HAVE_LIBC_PTHREAD\n'}
+[2.410524] (-) TimerEvent: {}
+[2.480201] (orin_car) StdoutLine: {'line': b'-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success\n'}
+[2.482585] (orin_car) StdoutLine: {'line': b'-- Found Threads: TRUE  \n'}
+[2.510679] (-) TimerEvent: {}
+[2.606496] (orin_car) StdoutLine: {'line': b'-- Found rclpy: 3.3.19 (/opt/ros/humble/share/rclpy/cmake)\n'}
+[2.610741] (-) TimerEvent: {}
+[2.711176] (-) TimerEvent: {}
+[2.736356] (orin_car) StdoutLine: {'line': b'-- Configuring done\n'}
+[2.745086] (orin_car) StdoutLine: {'line': b'-- Generating done\n'}
+[2.749083] (orin_car) StdoutLine: {'line': b'-- Build files have been written to: /home/jetson/ros_ws/src/orin_car/build/orin_car\n'}
+[2.770748] (orin_car) CommandEnded: {'returncode': 0}
+[2.771991] (orin_car) JobProgress: {'identifier': 'orin_car', 'progress': 'build'}
+[2.773451] (orin_car) Command: {'cmd': ['/usr/bin/cmake', '--build', '/home/jetson/ros_ws/src/orin_car/build/orin_car', '--', '-j6', '-l6'], 'cwd': '/home/jetson/ros_ws/src/orin_car/build/orin_car', 'env': OrderedDict([('LESSOPEN', '| /usr/bin/lesspipe %s'), ('USER', 'jetson'), ('SSH_CLIENT', '70.12.246.54 39490 22'), ('XDG_SESSION_TYPE', 'tty'), ('SHLVL', '1'), ('LD_LIBRARY_PATH', '/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/aarch64-linux-gnu:/opt/ros/humble/lib'), ('MOTD_SHOWN', 'pam'), ('HOME', '/home/jetson'), ('OLDPWD', '/home/jetson/ros_ws/src'), ('SSH_TTY', '/dev/pts/2'), ('JETSON_L4T', '36.4.7'), ('ROS_PYTHON_VERSION', '3'), ('JETSON_MODEL', 'NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super'), ('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/user/1000/bus'), ('COLCON_PREFIX_PATH', '/home/jetson/ros_ws/install'), ('ROS_DISTRO', 'humble'), ('LOGNAME', 'jetson'), ('JETSON_MODULE', 'NVIDIA Jetson Orin Nano (Developer kit)'), ('JETSON_SERIAL_NUMBER', '1422025002522'), ('_', '/usr/bin/colcon'), ('ROS_VERSION', '2'), ('XDG_SESSION_CLASS', 'user'), ('TERM', 'xterm-256color'), ('XDG_SESSION_ID', '8'), ('ROS_LOCALHOST_ONLY', '0'), ('PATH', '/home/jetson/.local/bin:/opt/ros/humble/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin'), ('FASTRTPS_DEFAULT_PROFILES_FILE', '/home/jetson/fastdds.xml'), ('XDG_RUNTIME_DIR', '/run/user/1000'), ('LANG', 'en_US.UTF-8'), ('RMW_IMPLEMENTATION', 'rmw_fastrtps_cpp'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('JETSON_SOC', 'tegra234'), ('ROS_DOMAIN_ID', '30'), ('AMENT_PREFIX_PATH', '/home/jetson/ros_ws/install/orin_car:/home/jetson/ros_ws/install/ydlidar_ros2_driver:/home/jetson/ros_ws/install/rf2o_laser_odometry:/opt/ros/humble'), ('SHELL', '/bin/bash'), ('LESSCLOSE', '/usr/bin/lesspipe %s %s'), ('JETSON_CUDA_ARCH_BIN', '8.7'), ('PWD', '/home/jetson/ros_ws/src/orin_car/build/orin_car'), ('LC_ALL', 'en_US.UTF-8'), ('SSH_CONNECTION', '70.12.246.54 39490 70.12.247.63 22'), ('XDG_DATA_DIRS', '/usr/share/gnome:/usr/local/share:/usr/share:/var/lib/snapd/desktop'), ('PYTHONPATH', '/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('COLCON', '1'), ('JETSON_JETPACK', ''), ('CMAKE_PREFIX_PATH', '/home/jetson/ros_ws/install/orin_car:/home/jetson/ros_ws/install/ydlidar_ros2_driver:/home/jetson/ros_ws/install/rf2o_laser_odometry:/opt/ros/humble'), ('JETSON_P_NUMBER', 'p3767-0005')]), 'shell': False}
+[2.811386] (-) TimerEvent: {}
+[2.859354] (orin_car) CommandEnded: {'returncode': 0}
+[2.860836] (orin_car) JobProgress: {'identifier': 'orin_car', 'progress': 'install'}
+[2.886560] (orin_car) Command: {'cmd': ['/usr/bin/cmake', '--install', '/home/jetson/ros_ws/src/orin_car/build/orin_car'], 'cwd': '/home/jetson/ros_ws/src/orin_car/build/orin_car', 'env': OrderedDict([('LESSOPEN', '| /usr/bin/lesspipe %s'), ('USER', 'jetson'), ('SSH_CLIENT', '70.12.246.54 39490 22'), ('XDG_SESSION_TYPE', 'tty'), ('SHLVL', '1'), ('LD_LIBRARY_PATH', '/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/aarch64-linux-gnu:/opt/ros/humble/lib'), ('MOTD_SHOWN', 'pam'), ('HOME', '/home/jetson'), ('OLDPWD', '/home/jetson/ros_ws/src'), ('SSH_TTY', '/dev/pts/2'), ('JETSON_L4T', '36.4.7'), ('ROS_PYTHON_VERSION', '3'), ('JETSON_MODEL', 'NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super'), ('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/user/1000/bus'), ('COLCON_PREFIX_PATH', '/home/jetson/ros_ws/install'), ('ROS_DISTRO', 'humble'), ('LOGNAME', 'jetson'), ('JETSON_MODULE', 'NVIDIA Jetson Orin Nano (Developer kit)'), ('JETSON_SERIAL_NUMBER', '1422025002522'), ('_', '/usr/bin/colcon'), ('ROS_VERSION', '2'), ('XDG_SESSION_CLASS', 'user'), ('TERM', 'xterm-256color'), ('XDG_SESSION_ID', '8'), ('ROS_LOCALHOST_ONLY', '0'), ('PATH', '/home/jetson/.local/bin:/opt/ros/humble/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin'), ('FASTRTPS_DEFAULT_PROFILES_FILE', '/home/jetson/fastdds.xml'), ('XDG_RUNTIME_DIR', '/run/user/1000'), ('LANG', 'en_US.UTF-8'), ('RMW_IMPLEMENTATION', 'rmw_fastrtps_cpp'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('JETSON_SOC', 'tegra234'), ('ROS_DOMAIN_ID', '30'), ('AMENT_PREFIX_PATH', '/home/jetson/ros_ws/install/orin_car:/home/jetson/ros_ws/install/ydlidar_ros2_driver:/home/jetson/ros_ws/install/rf2o_laser_odometry:/opt/ros/humble'), ('SHELL', '/bin/bash'), ('LESSCLOSE', '/usr/bin/lesspipe %s %s'), ('JETSON_CUDA_ARCH_BIN', '8.7'), ('PWD', '/home/jetson/ros_ws/src/orin_car/build/orin_car'), ('LC_ALL', 'en_US.UTF-8'), ('SSH_CONNECTION', '70.12.246.54 39490 70.12.247.63 22'), ('XDG_DATA_DIRS', '/usr/share/gnome:/usr/local/share:/usr/share:/var/lib/snapd/desktop'), ('PYTHONPATH', '/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('COLCON', '1'), ('JETSON_JETPACK', ''), ('CMAKE_PREFIX_PATH', '/home/jetson/ros_ws/install/orin_car:/home/jetson/ros_ws/install/ydlidar_ros2_driver:/home/jetson/ros_ws/install/rf2o_laser_odometry:/opt/ros/humble'), ('JETSON_P_NUMBER', 'p3767-0005')]), 'shell': False}
+[2.911501] (-) TimerEvent: {}
+[2.912177] (orin_car) StdoutLine: {'line': b'-- Install configuration: ""\n'}
+[2.913119] (orin_car) StdoutLine: {'line': b'-- Execute custom install script\n'}
+[2.914476] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/lib/orin_car/ackermann_driver.py\n'}
+[2.934234] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/lib/orin_car/mqtt_nav_bridge_ssafy.py\n'}
+[2.953197] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/lib/orin_car/mqtt_path_follower.py\n'}
+[2.972102] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/lib/orin_car/docking_ai.py\n'}
+[2.990952] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/lib/orin_car/docking_controller.py\n'}
+[3.011359] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/launch/docking_test_launch.py\n'}
+[3.011770] (-) TimerEvent: {}
+[3.031223] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/launch/final_launch.py\n'}
+[3.051360] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/launch/nav_launch.py\n'}
+[3.071970] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/launch/simul_nav_launch.py\n'}
+[3.091044] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/launch/slam_launch.py\n'}
+[3.110172] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/launch/slam_test_launch.py\n'}
+[3.111912] (-) TimerEvent: {}
+[3.129858] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/launch/trailer_nav_launch.py\n'}
+[3.150217] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/config/X4-Pro.yaml\n'}
+[3.169439] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/config/nav2_params.yaml\n'}
+[3.187922] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/config/slam_params.yaml\n'}
+[3.208081] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/urdf/ackermann_car.urdf.xacro\n'}
+[3.212226] (-) TimerEvent: {}
+[3.227572] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/ament_index/resource_index/package_run_dependencies/orin_car\n'}
+[3.247566] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/ament_index/resource_index/parent_prefix_path/orin_car\n'}
+[3.267315] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/environment/ament_prefix_path.sh\n'}
+[3.286834] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/environment/ament_prefix_path.dsv\n'}
+[3.306253] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/environment/path.sh\n'}
+[3.312525] (-) TimerEvent: {}
+[3.325751] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/environment/path.dsv\n'}
+[3.346195] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/local_setup.bash\n'}
+[3.365740] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/local_setup.sh\n'}
+[3.385265] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/local_setup.zsh\n'}
+[3.404416] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/local_setup.dsv\n'}
+[3.412654] (-) TimerEvent: {}
+[3.423908] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/package.dsv\n'}
+[3.443585] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/ament_index/resource_index/packages/orin_car\n'}
+[3.463510] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/cmake/orin_carConfig.cmake\n'}
+[3.482749] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/cmake/orin_carConfig-version.cmake\n'}
+[3.501716] (orin_car) StdoutLine: {'line': b'-- Symlinking: /home/jetson/ros_ws/src/orin_car/install/orin_car/share/orin_car/package.xml\n'}
+[3.512794] (-) TimerEvent: {}
+[3.526384] (orin_car) CommandEnded: {'returncode': 0}
+[3.596440] (orin_car) JobEnded: {'identifier': 'orin_car', 'rc': 0}
+[3.598136] (-) EventReactorShutdown: {}

@@ -6,8 +6,8 @@ import busio
 # ==========================================
 # [설정] 채널 및 각도
 # ==========================================
-LIFT_CHANNEL = 1      # 리프트 (팔)
-GRIPPER_CHANNEL = 2   # 그리퍼 (집게)
+LIFT_CHANNEL = 1      # 그리퍼 (팔)
+GRIPPER_CHANNEL = 2   # 리프트 (집게)
     
 
 def test_gripper():
@@ -28,27 +28,27 @@ def test_gripper():
     
 	
     # 초기 상태
-    kit.servo[LIFT_CHANNEL].angle = 70
-    time.sleep(3.0)
-    kit.servo[GRIPPER_CHANNEL].angle = 120
-    time.sleep(3.0)
+    kit.servo[LIFT_CHANNEL].angle = 160
+    time.sleep(1.0)
+    kit.servo[GRIPPER_CHANNEL].angle = 70
+    time.sleep(1.0)
     print("초기 상태")
 
     # 리프트 내리고 그리퍼로 잡고 리프트 올리기
-    kit.servo[LIFT_CHANNEL].angle = 90
+    kit.servo[LIFT_CHANNEL].angle = 140
     time.sleep(1.0)
-    kit.servo[GRIPPER_CHANNEL].angle = 50
+    kit.servo[GRIPPER_CHANNEL].angle = 120
     time.sleep(1.0)
-    kit.servo[LIFT_CHANNEL].angle = 70
+    kit.servo[LIFT_CHANNEL].angle = 160
     time.sleep(1.0)
     print("grip 완료")
 
     # 리프트 내리고 그리퍼 풀고 리프트 올리기
-    kit.servo[LIFT_CHANNEL].angle = 90
+    kit.servo[LIFT_CHANNEL].angle = 140
     time.sleep(1.0)
-    kit.servo[GRIPPER_CHANNEL].angle = 120
+    kit.servo[GRIPPER_CHANNEL].angle = 70
     time.sleep(1.0)
-    kit.servo[LIFT_CHANNEL].angle = 70
+    kit.servo[LIFT_CHANNEL].angle = 160
     time.sleep(1.0)
     print("놓기 헤제")
 
