@@ -19,6 +19,8 @@ install(PROGRAMS
   scripts/docking_controller.py
   scripts/docking_controller_v2.py
   scripts/marshaller_controller.py
+  scripts/marshaller_controller_v2.py
+  scripts/master_controller_ssafy.py
   scripts/gesture_ai.py
   DESTINATION lib/${PROJECT_NAME}
 )
