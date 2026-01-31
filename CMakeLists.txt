@@ -17,12 +17,11 @@ install(PROGRAMS
   scripts/mqtt_path_follower.py
   scripts/docking_ai.py
   scripts/docking_controller.py
-  scripts/docking_controller_v2.py
   scripts/marshaller_controller.py
-  scripts/marshaller_controller_v2.py
-  scripts/master_controller_ssafy.py
-  scripts/master_controller_dynamic.py
   scripts/gesture_ai.py
+  scripts/vision_manager.py
+  scripts/vision_manager_raw.py
+  scripts/mqtt_total_bridge.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
