@@ -15,7 +15,6 @@ PATH_FOLDER = os.path.expanduser("~/trailer_paths")
 
 class DrivingControllerFinal(Node):
     def __init__(self):
-        # 이름도 driving_controller로 변경!
         super().__init__('driving_controller_final') 
 
         # 1. 구독: 시스템 모드 (켜고 끄기용)
@@ -29,32 +28,54 @@ class DrivingControllerFinal(Node):
         self._action_client = ActionClient(self, FollowPath, 'follow_path')
         self._goal_handle = None 
 
-        # 초기 위치 설정용 퍼블리셔
+        # [수정] mqtt_path_follower.py와 동일하게 초기 위치 퍼블리셔 생성
         self.initial_pose_pub = self.create_publisher(PoseWithCovarianceStamped, 'initialpose', 10)
         self.declare_parameter('init_x', -1.111)
         self.declare_parameter('init_y', 0.201)
         self.declare_parameter('init_yaw', -1.57)
         
-        # 10초 뒤 초기 위치 설정 (한번만)
+        # [수정] mqtt_path_follower.py와 동일하게 단순 10초 타이머 사용 (복잡한 로직 제거)
+        self.get_logger().info("⏳ 10초 뒤에 초기 위치를 자동으로 설정합니다...")
         self.timer_init = self.create_timer(10.0, self.set_initial_pose_once)
 
         self.path_queue = []
         self.get_logger().info("✅ Driving Controller Ready (Waiting for ROS Topic)")
 
+    def set_initial_pose_once(self):
+        """ mqtt_path_follower.py의 로직 그대로 적용 """
+        self.timer_init.cancel()
+        
+        init_x = self.get_parameter('init_x').value
+        init_y = self.get_parameter('init_y').value
+        init_yaw = self.get_parameter('init_yaw').value
+        
+        pose_msg = PoseWithCovarianceStamped()
+        pose_msg.header.frame_id = 'map'
+        pose_msg.header.stamp = self.get_clock().now().to_msg()
+        
+        pose_msg.pose.pose.position.x = float(init_x)
+        pose_msg.pose.pose.position.y = float(init_y)
+        pose_msg.pose.pose.position.z = 0.0
+        
+        # Yaw -> Quaternion 변환 (mqtt_path_follower.py 방식)
+        pose_msg.pose.pose.orientation.z = math.sin(init_yaw / 2.0)
+        pose_msg.pose.pose.orientation.w = math.cos(init_yaw / 2.0)
+        
+        # [수정] 공분산 값 제거 (mqtt_path_follower.py는 기본값 0.0 사용)
+        
+        self.initial_pose_pub.publish(pose_msg)
+        self.get_logger().info(f"📍 Auto Initial Pose Set: ({init_x}, {init_y})")
+
     def mode_callback(self, msg):
         self.current_mode = msg.data
-        # 내가 일할 시간(DRIVING)이 아니면 하던 거 멈춤
         if self.current_mode != "DRIVING":
             self.cancel_nav2()
 
     def path_callback(self, msg):
-        """ MQTT Bridge가 던져준 경로 리스트를 받음 """
         try:
-            # JSON 문자열 -> 리스트 변환
             path_input = json.loads(msg.data)
             self.get_logger().info(f"📥 Path Received: {path_input}")
             
-            # 모드가 DRIVING일 때만 수락
             if self.current_mode == "DRIVING":
                 self.path_queue = []
                 if isinstance(path_input, list): self.path_queue.extend(path_input)
@@ -62,7 +83,6 @@ class DrivingControllerFinal(Node):
                 self.process_next_path()
             else:
                 self.get_logger().warn("⚠️ Path received but mode is NOT DRIVING. Ignored.")
-                
         except Exception as e:
             self.get_logger().error(f"Path Parsing Error: {e}")
 
@@ -72,23 +92,6 @@ class DrivingControllerFinal(Node):
             self._goal_handle.cancel_goal_async()
             self._goal_handle = None
             self.path_queue = []
-
-    def set_initial_pose_once(self):
-        self.timer_init.cancel()
-        init_x = self.get_parameter('init_x').value
-        init_y = self.get_parameter('init_y').value
-        init_yaw = self.get_parameter('init_yaw').value
-        
-        pose_msg = PoseWithCovarianceStamped()
-        pose_msg.header.frame_id = 'map'
-        pose_msg.header.stamp = self.get_clock().now().to_msg()
-        pose_msg.pose.pose.position.x = float(init_x)
-        pose_msg.pose.pose.position.y = float(init_y)
-        pose_msg.pose.pose.orientation.z = math.sin(init_yaw / 2.0)
-        pose_msg.pose.pose.orientation.w = math.cos(init_yaw / 2.0)
-        
-        self.initial_pose_pub.publish(pose_msg)
-        self.get_logger().info(f"📍 Initial Pose Set")
 
     def process_next_path(self):
         if not self.path_queue:
@@ -102,7 +105,7 @@ class DrivingControllerFinal(Node):
         full_path = os.path.join(PATH_FOLDER, filename)
         if not os.path.exists(full_path):
             self.get_logger().error(f"❌ File not found: {full_path}")
-            self.process_next_path() # 다음 파일 시도
+            self.process_next_path()
             return
 
         with open(full_path, 'r') as f:
@@ -142,7 +145,7 @@ class DrivingControllerFinal(Node):
         result_future.add_done_callback(self.get_result_callback)
 
     def get_result_callback(self, future):
-        self.process_next_path() # 하나 끝나면 다음 거 실행
+        self.process_next_path()
 
 def main(args=None):
     rclpy.init(args=args)

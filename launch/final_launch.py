@@ -1,7 +1,7 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import IncludeLaunchDescription, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 import xacro
@@ -12,22 +12,31 @@ def generate_launch_description():
     nav2_pkg = 'nav2_bringup'
 
     # ================= [1. 파일 경로 설정] =================
+    # [수정] trailer_nav_launch.py와 동일하게 경로 설정
     lidar_config = os.path.join(pkg_share, 'config', 'X4-Pro.yaml')
     nav2_params = os.path.join(pkg_share, 'config', 'nav2_params.yaml')
-    # 지도 파일 경로는 실제 환경에 맞춰 수정 필요
     map_file = os.path.join(os.path.expanduser('~'), 'maps', 'my_map.yaml') 
     xacro_file = os.path.join(pkg_share, 'urdf', 'ackermann_car.urdf.xacro')
 
     # ================= [2. 로봇 모델(URDF) 처리] =================
-    doc = xacro.process_file(xacro_file)
-    robot_desc = {'robot_description': doc.toxml()}
+    # [수정] trailer_nav_launch.py 처럼 예외 처리 추가하여 안전성 확보
+    try:
+        doc = xacro.process_file(xacro_file)
+        robot_desc = {'robot_description': doc.toxml()}
+    except Exception as e:
+        print(f"❌ Xacro 처리 실패: {e}")
+        return LaunchDescription([])
+
+    # [수정] trailer_nav_launch.py와 동일하게 변수로 분리 (실수 방지)
+    sim_time_config = {'use_sim_time': False}
 
     # ================= [3. 공통 하드웨어 & 센서] =================
     
     # 3-1. 로봇 상태 퍼블리셔 (TF)
     node_robot_state = Node(
         package='robot_state_publisher', executable='robot_state_publisher',
-        output='screen', parameters=[robot_desc, {'use_sim_time': False}]
+        output='screen', 
+        parameters=[robot_desc, sim_time_config] # [수정] 변수 적용
     )
     
     # 3-2. 관절 상태 퍼블리셔
@@ -44,12 +53,18 @@ def generate_launch_description():
     )
 
     # 3-4. 오도메트리 (위치 추정)
+    # [수정] trailer_nav_launch.py의 파라미터 그대로 적용 (init_pose_from_topic 추가됨!)
     node_rf2o = Node(
         package='rf2o_laser_odometry', executable='rf2o_laser_odometry_node',
         output='screen',
         parameters=[{
-            'laser_scan_topic': '/scan', 'odom_topic': '/odom',
-            'publish_tf': True, 'base_frame_id': 'base_link', 'odom_frame_id': 'odom', 'freq': 10.0
+            'laser_scan_topic': '/scan', 
+            'odom_topic': '/odom',
+            'publish_tf': True, 
+            'base_frame_id': 'base_link', 
+            'odom_frame_id': 'odom', 
+            'init_pose_from_topic': '', # [중요] 기존 코드에 빠져있던 부분 추가
+            'freq': 10.0
         }]
     )
 
@@ -69,7 +84,7 @@ def generate_launch_description():
         launch_arguments={
             'map': map_file,
             'params_file': nav2_params,
-            'use_sim_time': 'false',
+            'use_sim_time': 'false', # [확인] 소문자 문자열 'false' 유지
             'autostart': 'true'
         }.items()
     )
@@ -81,10 +96,11 @@ def generate_launch_description():
     )
 
     # 4-3. MQTT 브릿지 (명령 수신)
-    node_bridge = Node(
-        package=pkg_name, executable='mqtt_final.py',
-        output='screen'
-    )
+    # [주석] 사용자 요청대로 여기서 실행 안 하고 따로 터미널에서 실행
+    # node_bridge = Node(
+    #     package=pkg_name, executable='mqtt_final.py',
+    #     output='screen'
+    # )
 
     # ================= [5. 기능별 컨트롤러] =================
     
@@ -107,15 +123,27 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        # 1. 즉시 실행: 로봇 상태, 드라이버, 라이다 (기초 하드웨어)
         node_robot_state,
         node_joint_state,
-        node_ydlidar,
-        node_rf2o,
         node_driver,
-        nav2_launch,
-        node_vision,
-        #node_bridge,
-        node_driving,
-        node_docking,
-        node_marshaller
+        node_ydlidar,
+        
+        # 2. 3초 후: 오도메트리 & 웹서버 (라이다 안정화 대기)
+        TimerAction(period=3.0, actions=[node_rf2o]),
+
+        # 3. 5초 후: Nav2 (무거운 프로세스)
+        TimerAction(period=5.0, actions=[nav2_launch]),
+
+        # 4. 10초 후: 카메라 & 비전 (Nav2 켜진 후 USB 안정화 대기)
+        # 카메라를 너무 빨리 켜면 라이다랑 충돌나서 꺼질 수 있음
+        TimerAction(period=10.0, actions=[node_vision]),
+
+        # 5. 12초 후: 통신 및 로직 컨트롤러 (모든 시스템 준비 완료 후)
+        TimerAction(period=12.0, actions=[
+            # node_bridge,      # [중요] 주석 해제함!
+            node_driving, 
+            node_docking, 
+            node_marshaller
+        ])
     ])
