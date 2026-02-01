@@ -25,6 +25,15 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
+install(PROGRAMS
+  final_scripts/docking_controller_final.py
+  final_scripts/driving_controller_final.py
+  final_scripts/marshaller_controller_final.py
+  final_scripts/mqtt_final.py
+  final_scripts/vision_final.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 
 # Launch, Config, URDF 폴더를 설치 목록에 추가
 install(DIRECTORY
