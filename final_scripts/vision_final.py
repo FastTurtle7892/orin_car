@@ -75,9 +75,9 @@ class VisionFinal(Node):
     def open_camera(self, index):
         cap = cv2.VideoCapture(index, cv2.CAP_V4L2)
         cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        cap.set(cv2.CAP_PROP_FPS, 30)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
+        cap.set(cv2.CAP_PROP_FPS, 15)
         return cap
 
     def vision_loop(self):

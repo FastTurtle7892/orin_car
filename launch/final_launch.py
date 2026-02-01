@@ -120,14 +120,17 @@ def generate_launch_description():
         node_ydlidar,
         node_rf2o,      # [변경] 지연 없이 바로 실행
         nav2_launch,    # [변경] 지연 없이 바로 실행
-        
+        node_vision,
+        node_driving,
+        node_docking,
+        node_marshaller		
         # 2. [Applications] 천천히 실행 (CPU 부하 관리)
         # Nav2가 완전히 켜진 뒤(약 10~15초)에 응용 노드 실행
-        TimerAction(period=15.0, actions=[node_vision]),
+#        TimerAction(period=15.0, actions=[node_vision]),
         
-        TimerAction(period=20.0, actions=[
-            node_driving, 
-            node_docking, 
-            node_marshaller
-        ])
+#       TimerAction(period=20.0, actions=[
+#           node_driving, 
+#           node_docking, 
+#           node_marshaller
+#       ])
     ])
