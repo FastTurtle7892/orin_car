@@ -114,7 +114,7 @@ def generate_launch_description():
         node_driver,
         nav2_launch,
         node_vision,
-        node_bridge,
+        #node_bridge,
         node_driving,
         node_docking,
         node_marshaller
