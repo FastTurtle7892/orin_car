@@ -14,7 +14,7 @@ class VisionFinal(Node):
         # 1. 토픽 설정
         self.create_subscription(String, '/system_mode', self.mode_callback, 10)
         self.vision_pub = self.create_publisher(String, '/vision_status', 10)
-        self.image_pub = self.create_publisher(Image, '/camera/image_raw', 10)
+        self.image_pub = self.create_publisher(Image, '/camera/integrated_stream', 10)
         
         self.bridge = CvBridge()
 
