@@ -129,21 +129,24 @@ def generate_launch_description():
         node_driver,
         node_ydlidar,
         
-        # 2. 3초 후: 오도메트리 & 웹서버 (라이다 안정화 대기)
-        TimerAction(period=3.0, actions=[node_rf2o]),
+        # 2. 5초 후: 오도메트리 & 웹서버 (라이다 안정화 대기)
+        # (기존 3초 -> 5초로 변경)
+        TimerAction(period=1.0, actions=[node_rf2o]),
 
-        # 3. 5초 후: Nav2 (무거운 프로세스)
-        TimerAction(period=5.0, actions=[nav2_launch]),
+        # 3. 15초 후: Nav2 (가장 무거운 프로세스)
+        # (기존 5초 -> 15초로 대폭 변경! 앞에서 켠 노드들이 안정될 시간을 줌)
+        TimerAction(period=3.0, actions=[nav2_launch]),
 
-        # 4. 10초 후: 카메라 & 비전 (Nav2 켜진 후 USB 안정화 대기)
-        # 카메라를 너무 빨리 켜면 라이다랑 충돌나서 꺼질 수 있음
-        TimerAction(period=10.0, actions=[node_vision]),
+        # 4. 25초 후: 카메라 & 비전
+        # (Nav2가 켜지고 CPU가 진정될 때까지 10초 더 기다림)
+        TimerAction(period=5.0, actions=[node_vision]),
 
-        # 5. 12초 후: 통신 및 로직 컨트롤러 (모든 시스템 준비 완료 후)
-        TimerAction(period=12.0, actions=[
-            # node_bridge,      # [중요] 주석 해제함!
+        # 5. 30초 후: 컨트롤러들
+        TimerAction(period=7.0, actions=[
+            # node_bridge,
             node_driving, 
             node_docking, 
             node_marshaller
         ])
     ])
+
