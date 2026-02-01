@@ -10,41 +10,52 @@ import json
 import math
 import os
 
-# 경로 파일 폴더 (필요시 수정)
 PATH_FOLDER = os.path.expanduser("~/trailer_paths")
 
 class DrivingControllerFinal(Node):
     def __init__(self):
         super().__init__('driving_controller_final') 
 
-        # 1. 구독: 시스템 모드 (켜고 끄기용)
         self.create_subscription(String, '/system_mode', self.mode_callback, 10)
-        # 2. 구독: 경로 명령 (일감 받기용)
         self.create_subscription(String, '/driving/path_cmd', self.path_callback, 10)
         
         self.current_mode = "IDLE"
-        
-        # Nav2 Action Client
         self._action_client = ActionClient(self, FollowPath, 'follow_path')
         self._goal_handle = None 
 
-        # [수정] mqtt_path_follower.py와 동일하게 초기 위치 퍼블리셔 생성
         self.initial_pose_pub = self.create_publisher(PoseWithCovarianceStamped, 'initialpose', 10)
         self.declare_parameter('init_x', -1.111)
         self.declare_parameter('init_y', 0.201)
         self.declare_parameter('init_yaw', -1.57)
         
-        # [수정] mqtt_path_follower.py와 동일하게 단순 10초 타이머 사용 (복잡한 로직 제거)
-        self.get_logger().info("⏳ 10초 뒤에 초기 위치를 자동으로 설정합니다...")
-        self.timer_init = self.create_timer(10.0, self.set_initial_pose_once)
-
-        self.path_queue = []
-        self.get_logger().info("✅ Driving Controller Ready (Waiting for ROS Topic)")
-
-    def set_initial_pose_once(self):
-        """ mqtt_path_follower.py의 로직 그대로 적용 """
-        self.timer_init.cancel()
+        # [수정 포인트]
+        self.init_pose_count = 0
+        # 1.0초마다 실행되는 타이머
+        self.timer_init = self.create_timer(1.0, self.check_and_publish_init_pose)
         
+        self.path_queue = []
+        self.get_logger().info("✅ Driving Controller Ready (Enhanced Initial Pose)")
+
+    def check_and_publish_init_pose(self):
+        self.init_pose_count += 1
+
+        # [수정 1] 대기 시간 대폭 증가 (기존 15초 -> 30초)
+        # web_video_server 때문에 Nav2 켜지는 게 느려지므로 충분히 기다림
+        if self.init_pose_count < 30:
+            if self.init_pose_count % 5 == 0:
+                self.get_logger().info(f"⏳ Nav2 부팅 대기 중... ({self.init_pose_count}/30)")
+            return
+
+        # [수정 2] 전송 횟수 증가 (기존 5회 -> 10회)
+        # 30초부터 40초까지 1초 간격으로 계속 쏨
+        if self.init_pose_count <= 40: 
+            self.publish_initial_pose()
+            self.get_logger().info(f"📍 초기 위치 전송 시도 ({self.init_pose_count - 30}/10)...")
+        else:
+            self.timer_init.cancel()
+            self.get_logger().info("✅ 초기 위치 전송 완료. (시스템 준비 끝)")
+
+    def publish_initial_pose(self):
         init_x = self.get_parameter('init_x').value
         init_y = self.get_parameter('init_y').value
         init_yaw = self.get_parameter('init_yaw').value
@@ -57,14 +68,10 @@ class DrivingControllerFinal(Node):
         pose_msg.pose.pose.position.y = float(init_y)
         pose_msg.pose.pose.position.z = 0.0
         
-        # Yaw -> Quaternion 변환 (mqtt_path_follower.py 방식)
         pose_msg.pose.pose.orientation.z = math.sin(init_yaw / 2.0)
         pose_msg.pose.pose.orientation.w = math.cos(init_yaw / 2.0)
         
-        # [수정] 공분산 값 제거 (mqtt_path_follower.py는 기본값 0.0 사용)
-        
         self.initial_pose_pub.publish(pose_msg)
-        self.get_logger().info(f"📍 Auto Initial Pose Set: ({init_x}, {init_y})")
 
     def mode_callback(self, msg):
         self.current_mode = msg.data
@@ -75,42 +82,32 @@ class DrivingControllerFinal(Node):
         try:
             path_input = json.loads(msg.data)
             self.get_logger().info(f"📥 Path Received: {path_input}")
-            
             if self.current_mode == "DRIVING":
                 self.path_queue = []
                 if isinstance(path_input, list): self.path_queue.extend(path_input)
                 else: self.path_queue.append(path_input)
                 self.process_next_path()
-            else:
-                self.get_logger().warn("⚠️ Path received but mode is NOT DRIVING. Ignored.")
         except Exception as e:
-            self.get_logger().error(f"Path Parsing Error: {e}")
+            self.get_logger().error(f"Path Error: {e}")
 
     def cancel_nav2(self):
         if self._goal_handle is not None and self._goal_handle.accepted:
-            self.get_logger().warn("🛑 Stopping Driving (Mode Changed)")
             self._goal_handle.cancel_goal_async()
             self._goal_handle = None
             self.path_queue = []
 
     def process_next_path(self):
-        if not self.path_queue:
-            self.get_logger().info("✅ All paths finished.")
-            return
-
+        if not self.path_queue: return
         next_file = self.path_queue.pop(0)
         self.execute_json_path(next_file)
 
     def execute_json_path(self, filename):
         full_path = os.path.join(PATH_FOLDER, filename)
         if not os.path.exists(full_path):
-            self.get_logger().error(f"❌ File not found: {full_path}")
             self.process_next_path()
             return
 
-        with open(full_path, 'r') as f:
-            data = json.load(f)
-
+        with open(full_path, 'r') as f: data = json.load(f)
         xs, ys, yaws = data.get("x", []), data.get("y", []), data.get("yaw", [])
         if not xs: return
 
@@ -138,8 +135,7 @@ class DrivingControllerFinal(Node):
 
     def goal_response_callback(self, future):
         goal_handle = future.result()
-        if not goal_handle.accepted:
-            return
+        if not goal_handle.accepted: return
         self._goal_handle = goal_handle
         result_future = goal_handle.get_result_async()
         result_future.add_done_callback(self.get_result_callback)
