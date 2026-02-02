@@ -120,20 +120,22 @@ def generate_launch_description():
 
     return LaunchDescription([
         # 1. [Base Platform] 즉시 실행 그룹
-        node_robot_state,
+#        node_mqtt,        
+		node_robot_state,
         node_joint_state,
         node_driver,
         node_ydlidar,
         node_rf2o,
         nav2_launch,
-        node_mqtt,      # <--- [중요] 여기에 추가 (TimerAction 아님)
+		
+              # <--- [중요] 여기에 추가 (TimerAction 아님)
         
         # 2. [Applications] 순차 실행 그룹
         # T+15s: 비전 시스템
-        TimerAction(period=15.0, actions=[node_vision]),
+        TimerAction(period=25.0, actions=[node_vision]),
         
         # T+20s: 제어 로직
-        TimerAction(period=20.0, actions=[
+        TimerAction(period=30.0, actions=[
             node_driving, 
             node_docking, 
             node_marshaller
