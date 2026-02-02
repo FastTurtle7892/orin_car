@@ -34,6 +34,17 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
+install(PROGRAMS
+  test_scripts/mqtt_total_control.py
+  test_scripts/docking_controller.py
+  test_scripts/marshaller_controller.py
+  test_scripts/driving_controller.py
+  test_scripts/ackermann_driver.py
+  test_scripts/docking_ai.py
+  test_scripts/gesture_ai.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 
 # Launch, Config, URDF 폴더를 설치 목록에 추가
 install(DIRECTORY
