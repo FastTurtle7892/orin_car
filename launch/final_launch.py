@@ -127,7 +127,7 @@ def generate_launch_description():
         node_driver,
         node_ydlidar,
         node_rf2o,
-        nav2_launch,
+        nav2_launch
 # node_mqtt,		
               # <--- [중요] 여기에 추가 (TimerAction 아님)
         
@@ -136,9 +136,9 @@ def generate_launch_description():
 #TimerAction(period=10.0, actions=[node_vision]),
         
         # T+20s: 제어 로직
-        TimerAction(period=15.0, actions=[
-            node_driving, 
-            node_docking, 
-            node_marshaller
-        ])
+#        TimerAction(period=15.0, actions=[
+#           node_driving, 
+#           node_docking, 
+#           node_marshaller
+#       ])
     ])

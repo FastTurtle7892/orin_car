@@ -32,6 +32,7 @@ install(PROGRAMS
   final_scripts/mqtt_final.py
   final_scripts/vision_final.py
   final_scripts/vision_mqtt_combined.py
+  final_scripts/docking_ai_final.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -7,7 +7,7 @@ from std_msgs.msg import String
 from cv_bridge import CvBridge
 import cv2
 import time
-from docking_ai import DockingAI
+from docking_ai_final import DockingAI
 
 class DockingControllerFinal(Node):
     def __init__(self):
