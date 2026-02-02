@@ -72,6 +72,12 @@ def generate_launch_description():
         name='ackermann_driver', # [중요] 이름 명시
         output='screen'
     )
+    # [추가] 3-6. MQTT 통신 노드 (가볍기 때문에 즉시 실행)
+    node_mqtt = Node(
+        package=pkg_name, executable='mqtt_final.py',
+        name='mqtt_final',
+        output='screen'
+    )
 
     # ================= [4. 자율주행 스택 (즉시 실행)] =================
 
@@ -113,18 +119,20 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        # 1. [Base Platform] 즉시 실행 (trailer_nav_launch.py와 동일 구성)
+        # 1. [Base Platform] 즉시 실행 그룹
         node_robot_state,
         node_joint_state,
         node_driver,
         node_ydlidar,
-        node_rf2o,      # [변경] 지연 없이 바로 실행
-        nav2_launch,    # [변경] 지연 없이 바로 실행
+        node_rf2o,
+        nav2_launch,
+        node_mqtt,      # <--- [중요] 여기에 추가 (TimerAction 아님)
         
-        # 2. [Applications] 천천히 실행 (CPU 부하 관리)
-        # Nav2가 완전히 켜진 뒤(약 10~15초)에 응용 노드 실행
+        # 2. [Applications] 순차 실행 그룹
+        # T+15s: 비전 시스템
         TimerAction(period=15.0, actions=[node_vision]),
         
+        # T+20s: 제어 로직
         TimerAction(period=20.0, actions=[
             node_driving, 
             node_docking, 
