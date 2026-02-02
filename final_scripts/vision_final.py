@@ -112,7 +112,7 @@ class VisionFinal(Node):
             # ROS 이미지 메시지로 변환하여 발행
             try:
                 ros_image = self.bridge.cv2_to_imgmsg(frame, "bgr8")
-                self.image_pub.publish(ros_image)
+# self.image_pub.publish(ros_image)
                 status_msg.data = f"Mode: {self.current_mode} (Active)"
             except Exception: pass
         else:

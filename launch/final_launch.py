@@ -120,14 +120,14 @@ def generate_launch_description():
 
     return LaunchDescription([
         # 1. [Base Platform] 즉시 실행 그룹
-#        node_mqtt,        
+        
 		node_robot_state,
         node_joint_state,
         node_driver,
         node_ydlidar,
         node_rf2o,
         nav2_launch,
-		
+        node_mqtt,		
               # <--- [중요] 여기에 추가 (TimerAction 아님)
         
         # 2. [Applications] 순차 실행 그룹
