@@ -3,53 +3,24 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 
 def generate_launch_description():
-    
-    # 1. [전방 카메라] (마샬러용) - 포맷: mjpeg2rgb (오타 수정됨)
-    front_cam = Node(
-        package='usb_cam',
-        executable='usb_cam_node_exe',
-        name='front_camera',
-        namespace='front_camera',
-        output='screen',
-        parameters=[{
-            'video_device': '/dev/video0',
-            'framerate': 15.0,
-            'image_width': 640,
-            'image_height': 480,
-            'pixel_format': 'mjpeg2rgb', # mjpeg 사용 (대역폭 절약)
-            'brightness': 50,
-        }],
-        remappings=[('/image_raw', '/front_camera/image_raw')]
-    )
 
-    # 2. [후방 카메라] (도킹용)
-    rear_cam = Node(
-        package='usb_cam',
-        executable='usb_cam_node_exe',
-        name='rear_camera',
-        namespace='rear_camera',
-        output='screen',
-        parameters=[{
-            'video_device': '/dev/video2', # 번호 확인 필수!
-            'framerate': 15.0,
-            'image_width': 640,
-            'image_height': 480,
-            'pixel_format': 'mjpeg2rgb',
-            'brightness': 50,
-        }],
-        remappings=[('/image_raw', '/rear_camera/image_raw')]
-    )
-
-    # 3. [도킹 AI 컨트롤러] (Jetson 내부에서 실행됨)
+    # 1. [도킹 컨트롤러] (카메라 열고, 판단하고, 명령 내림)
     docking_node = Node(
-        package='orin_car',           # setup.py 패키지 이름
-        executable='docking_controller.py', # setup.py entry_points 이름
+        package='orin_car',
+        executable='docking_controller.py', 
         name='docking_controller',
         output='screen'
     )
 
+    # 2. [모터 드라이버] (명령 받아서 바퀴 굴림)
+    motor_driver = Node(
+        package='orin_car',
+        executable='ackermann_driver.py', 
+        name='ackermann_driver',
+        output='screen'
+    )
+
     return LaunchDescription([
-        front_cam,
-        rear_cam,
-        docking_node
+        docking_node,
+        motor_driver
     ])

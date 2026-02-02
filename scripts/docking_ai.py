@@ -4,15 +4,14 @@ import math
 
 class DockingAI:
     def __init__(self):
-        # ---------------------------------------------------------
-        # [1] 사용자 설정
-        self.MARKER_SIZE = 1.1  # 단위: cm
-        self.TARGET_ID = 0
+        # [설정]
+        self.MARKER_SIZE = 1.1  # 마커 크기 (cm)
+        self.TARGET_ID = 0      # 목표 ID
         self.target_dict = cv2.aruco.DICT_6X6_250 
         
         # [거리 보정]
-        self.DIST_SCALE = 1.45   
-        self.DIST_OFFSET = -1.5  
+        self.DIST_SCALE = 1.45    
+        self.DIST_OFFSET = -1.5   
 
         # ArUco 설정
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(self.target_dict)
@@ -28,7 +27,7 @@ class DockingAI:
 
         self.detector = cv2.aruco.ArucoDetector(self.aruco_dict, self.parameters)
 
-        # [2] 캘리브레이션 결과
+        # [캘리브레이션]
         self.camera_matrix = np.array([
             [872.23558, 0.00000, 315.00614],
             [0.00000, 873.47815, 240.01070],
@@ -128,29 +127,9 @@ class DockingAI:
 
             cv2.aruco.drawDetectedMarkers(frame, corners, ids)
             
-            # [수정] 경고 해결을 위해 축 길이를 줄임 (1.5 -> 0.8)
             try:
                 cv2.drawFrameAxes(frame, self.camera_matrix, self.dist_coeffs, best_rvec, best_tvec, self.MARKER_SIZE * 0.8)
             except:
-                pass # 그리기 실패해도 죽지 않도록 예외처리
+                pass
 
-            # UI
-            box_width = 260
-            box_height = 190
-            box_x, box_y = w - box_width, h - box_height
-
-            overlay = frame.copy()
-            cv2.rectangle(overlay, (box_x, box_y), (w, h), (0, 0, 0), -1)
-            cv2.addWeighted(overlay, 0.6, frame, 0.4, 0, frame)
-
-            dist_col = (0, 255, 0) if (7.5 <= data["dist_cm"] <= 9.5) else (0, 255, 255)
-            yaw_col = (0, 255, 0) if abs(data["yaw"]) <= 0.5 else (0, 255, 255)
-            x_col    = (0, 255, 0) if abs(data["x_cm"]) <= 0.3 else (0, 255, 255)
-            
-            font = cv2.FONT_HERSHEY_SIMPLEX
-            cv2.putText(frame, f"ID: {data['id']}", (box_x+10, box_y+30), font, 0.8, (0,255,255), 2)
-            cv2.putText(frame, f"Dist : {data['dist_cm']:.1f} cm", (box_x+10, box_y+65), font, 0.7, dist_col, 2)
-            cv2.putText(frame, f"X    : {data['x_cm']:.2f} cm", (box_x+10, box_y+135), font, 0.7, x_col, 2)
-            cv2.putText(frame, f"Yaw  : {data['yaw']:.1f} deg", (box_x+10, box_y+100), font, 0.7, yaw_col, 2)
-            
         return data, frame
