@@ -55,6 +55,7 @@ def generate_launch_description():
         package='rf2o_laser_odometry', executable='rf2o_laser_odometry_node',
         name='rf2o_laser_odometry', # [중요] 이름 명시
         output='screen',
+		arguments=['--ros-args', '--log-level', 'warn'],
         parameters=[{
             'laser_scan_topic': '/scan', 
             'odom_topic': '/odom',
@@ -127,15 +128,15 @@ def generate_launch_description():
         node_ydlidar,
         node_rf2o,
         nav2_launch,
-        node_mqtt,		
+# node_mqtt,		
               # <--- [중요] 여기에 추가 (TimerAction 아님)
         
         # 2. [Applications] 순차 실행 그룹
         # T+15s: 비전 시스템
-        TimerAction(period=25.0, actions=[node_vision]),
+#TimerAction(period=10.0, actions=[node_vision]),
         
         # T+20s: 제어 로직
-        TimerAction(period=30.0, actions=[
+        TimerAction(period=15.0, actions=[
             node_driving, 
             node_docking, 
             node_marshaller

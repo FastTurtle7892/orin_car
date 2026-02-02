@@ -31,6 +31,7 @@ install(PROGRAMS
   final_scripts/marshaller_controller_final.py
   final_scripts/mqtt_final.py
   final_scripts/vision_final.py
+  final_scripts/vision_mqtt_combined.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

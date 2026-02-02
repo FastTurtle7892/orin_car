@@ -97,7 +97,7 @@ class MqttPathFollower(Node):
         self.get_logger().info(f"MQTT Subscribed: {TOPIC_CMD}")
         client.subscribe(TOPIC_CMD)
 
-	def on_message(self, client, userdata, msg):
+    def on_message(self, client, userdata, msg):
 	try:
 	    payload = json.loads(msg.payload.decode("utf-8"))
 	    cmd = payload.get("cmd")
