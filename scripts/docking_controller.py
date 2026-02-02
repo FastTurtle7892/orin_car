@@ -22,6 +22,10 @@ class DockingController(Node):
         self.STEP_WAIT_TIME = 1.5    
         # ==========================================
 
+        # [통합 모드 관리]
+        self.current_mode = "IDLE"
+        self.create_subscription(String, '/robot_mode', self.mode_callback, 10)
+
         self.create_subscription(Image, '/rear_camera/image_raw', self.image_callback, 10)
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self.gripper_pub = self.create_publisher(String, '/gripper_cmd', 10)
@@ -35,11 +39,21 @@ class DockingController(Node):
         self.docking_start_time = 0.0
         self.last_log_time = 0
 
-        # 시작 1초 후 초기 자세(INIT) 잡기
+        # 시작 1초 후 초기 자세(INIT) 잡기 (단, DOCKING 모드일 때만)
         self.create_timer(1.0, self.initialize_pose_once)
-        self.get_logger().info("✅ Docking Controller Started")
+        self.get_logger().info("✅ Docking Controller Started (Waiting for 'DOCKING' mode)")
+
+    def mode_callback(self, msg):
+        self.current_mode = msg.data
+        # 모드가 DOCKING으로 바뀌면 상태 리셋 등의 로직을 넣을 수도 있음
+        if self.current_mode == 'DOCKING':
+             self.get_logger().info("🚩 도킹 모드 활성화!")
 
     def initialize_pose_once(self):
+        # 모드가 DOCKING이 아니면 초기화도 보류
+        if self.current_mode != 'DOCKING':
+            return
+
         if self.state_mode == 0:
             self.get_logger().info("🏁 [INIT] Pose Setup (UP & OPEN)")
             self.publish_gripper("INIT") 
@@ -48,6 +62,10 @@ class DockingController(Node):
             time.sleep(2.0)
 
     def image_callback(self, msg):
+        # [중요] 내 모드가 아니면 동작 중지
+        if self.current_mode != 'DOCKING':
+            return
+
         # 1. 시퀀스 진행 중이면 영상 처리 중단하고 시퀀스 함수 실행
         if self.state_mode == 2:
             self.run_gripper_sequence()
@@ -100,9 +118,6 @@ class DockingController(Node):
     def run_gripper_sequence(self):
         """ 
         [잡기 시퀀스]
-        1. Down (140)
-        2. Grip (120)
-        3. Up (160)
         """
         elapsed = time.time() - self.docking_start_time
 

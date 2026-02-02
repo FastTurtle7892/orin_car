@@ -5,6 +5,7 @@ from rclpy.action import ActionClient
 from nav2_msgs.action import FollowPath
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
+from std_msgs.msg import String
 import json
 import math
 import paho.mqtt.client as mqtt
@@ -29,6 +30,10 @@ class MqttPathFollower(Node):
         self.declare_parameter('init_x', -1.111)
         self.declare_parameter('init_y', 0.201)
         self.declare_parameter('init_yaw', -1.57)
+        
+        # [통합 모드 관리]
+        self.current_mode = "IDLE"
+        self.create_subscription(String, '/robot_mode', self.mode_callback, 10)
 
         # [추가됨] 초기 위치 퍼블리셔 (AMCL 깨우기용)
         self.initial_pose_pub = self.create_publisher(PoseWithCovarianceStamped, 'initialpose', 10)
@@ -36,8 +41,7 @@ class MqttPathFollower(Node):
         # 1. Nav2 FollowPath Action Client
         self._action_client = ActionClient(self, FollowPath, 'follow_path')
         
-        # [수정됨] Nav2 서버 대기 방식을 'Blocking'에서 'Timer'로 변경
-        # (기존 wait_for_server()는 초기화 전에는 영원히 멈추므로 제거함)
+        # Nav2 서버 준비 확인
         self.is_nav2_ready = False
         self.nav2_check_timer = self.create_timer(2.0, self.check_nav2_server_ready)
         self.get_logger().info("⏳ Waiting for Nav2 Controller Server (Non-blocking)...")
@@ -61,6 +65,11 @@ class MqttPathFollower(Node):
         self.mqtt_thread = threading.Thread(target=self.client.loop_forever)
         self.mqtt_thread.daemon = True
         self.mqtt_thread.start()
+
+    def mode_callback(self, msg):
+        self.current_mode = msg.data
+        if self.current_mode == 'NAV':
+            self.get_logger().info("🚩 주행(NAV) 모드 활성화!")
 
     def check_nav2_server_ready(self):
         """ 주기적으로 Nav2 서버가 준비되었는지 확인 """
@@ -97,51 +106,51 @@ class MqttPathFollower(Node):
         self.get_logger().info(f"MQTT Subscribed: {TOPIC_CMD}")
         client.subscribe(TOPIC_CMD)
 
-	def on_message(self, client, userdata, msg):
-	try:
-	    payload = json.loads(msg.payload.decode("utf-8"))
-	    cmd = payload.get("cmd")
-	    
-	    # [수정] 리스트(path_files) 또는 단일 문자열(path_file) 모두 지원하도록 변경
-	    path_input = payload.get("path_files") or payload.get("path_file")
+    def on_message(self, client, userdata, msg):
+        try:
+            payload = json.loads(msg.payload.decode("utf-8"))
+            cmd = payload.get("cmd")
+            
+            # 리스트(path_files) 또는 단일 문자열(path_file) 모두 지원
+            path_input = payload.get("path_files") or payload.get("path_file")
 
-	    if cmd == "START_PATH" and path_input:
-	        if not self.is_nav2_ready:
-	            self.get_logger().warn("⛔ Nav2 Not Ready.")
-	            return
-	        
-	        # [수정] 기존 큐 초기화 후 새 경로 추가
-	        self.path_queue = []
-	        
-	        # [수정] 입력이 리스트인지 확인하여 큐에 추가
-	        if isinstance(path_input, list):
-	            self.path_queue.extend(path_input)
-	        else:
-	            self.path_queue.append(path_input)
-	        
-	        self.get_logger().info(f"📥 Received Path Queue: {self.path_queue}")
-	        
-	        # [추가] 큐 처리 시작 함수 호출
-	        self.process_next_path()
+            if cmd == "START_PATH" and path_input:
+                # [중요] NAV 모드가 아니면 실행 거부
+                if self.current_mode != 'NAV':
+                    self.get_logger().warn(f"⛔ 명령 거부: 현재 모드는 '{self.current_mode}' 입니다. (NAV 모드 필요)")
+                    return
 
-	    elif cmd == "STOP":
-	        self.path_queue = []
-	        self.stop_robot()
-	        
-	except Exception as e:
-	    self.get_logger().error(f"MQTT Error: {e}")
+                if not self.is_nav2_ready:
+                    self.get_logger().warn("⛔ Nav2 Not Ready.")
+                    return
+                
+                # 기존 큐 초기화 후 새 경로 추가
+                self.path_queue = []
+                
+                if isinstance(path_input, list):
+                    self.path_queue.extend(path_input)
+                else:
+                    self.path_queue.append(path_input)
+                
+                self.get_logger().info(f"📥 Received Path Queue: {self.path_queue}")
+                self.process_next_path()
 
+            elif cmd == "STOP":
+                self.path_queue = []
+                self.stop_robot()
+                
+        except Exception as e:
+            self.get_logger().error(f"MQTT Error: {e}")
 
     def process_next_path(self):
+        if not self.path_queue:
+            self.get_logger().info("✅ All paths completed!")
+            self.is_moving = False
+            return
 
-	if not self.path_queue:
-	    self.get_logger().info("✅ All paths completed!")
-	    self.is_moving = False
-	    return
-
-	next_file = self.path_queue.pop(0)
-	self.get_logger().info(f"▶ Executing Path File: {next_file} (Remaining: {len(self.path_queue)})")
-	self.execute_json_path(next_file)
+        next_file = self.path_queue.pop(0)
+        self.get_logger().info(f"▶ Executing Path File: {next_file} (Remaining: {len(self.path_queue)})")
+        self.execute_json_path(next_file)
 
     def execute_json_path(self, filename):
         full_path = os.path.join(PATH_FOLDER, filename)

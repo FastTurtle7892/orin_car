@@ -28,6 +28,10 @@ class MarshallerController(Node):
         self.declare_parameter('speed_slow', 0.12)
         self.declare_parameter('turn_angle', 0.5)
 
+        # [통합 모드 관리]
+        self.current_mode = "IDLE"
+        self.create_subscription(String, '/robot_mode', self.mode_callback, 10)
+
         # 2. 퍼블리셔
         self.cmd_vel_pub = self.create_publisher(Twist, 'cmd_vel', 10)
         self.gripper_pub = self.create_publisher(String, '/gripper_cmd', 10)
@@ -43,13 +47,22 @@ class MarshallerController(Node):
             
             self.get_logger().info(f"📂 모델 경로: {model_path}")
             self.marshal_ai = MarshallerAI(model_path=model_path)
-            self.get_logger().info("✅ Marshaller AI 로드 완료")
+            self.get_logger().info("✅ Marshaller AI 로드 완료 (Waiting for 'MARSHALLER' mode)")
             
         except Exception as e:
             self.get_logger().error(f"❌ 모델 로드 실패: {e}")
             self.marshal_ai = None
 
+    def mode_callback(self, msg):
+        self.current_mode = msg.data
+        if self.current_mode == 'MARSHALLER':
+            self.get_logger().info("🚩 마샬러 모드 활성화!")
+
     def image_callback(self, msg):
+        # [중요] 모드가 마샬러가 아니면 리턴 (AI 연산도 하지 않아 부하 감소)
+        if self.current_mode != 'MARSHALLER':
+            return
+            
         if self.marshal_ai is None: return
 
         try:
@@ -72,8 +85,7 @@ class MarshallerController(Node):
         speed_slow = self.get_parameter('speed_slow').value
         turn_ang = self.get_parameter('turn_angle').value
 
-        # [로그 출력 강화] 어떤 동작이든 로그를 남겨 디버깅 가능하게 함
-        
+        # [로그 출력 강화]
         if action == "FORWARD":
             twist.linear.x = float(speed_fast)
             self.get_logger().info(f"🚗 전진 (FAST) - {action}")
