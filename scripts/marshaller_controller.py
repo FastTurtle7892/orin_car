@@ -10,7 +10,7 @@ import sys
 import os
 
 from ament_index_python.packages import get_package_share_directory
-
+from rclpy.qos import qos_profile_sensor_data
 # 현재 폴더(scripts) 경로 추가
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 

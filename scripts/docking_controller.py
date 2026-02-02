@@ -8,6 +8,7 @@ from cv_bridge import CvBridge
 import cv2
 import time
 from docking_ai import DockingAI
+from rclpy.qos import qos_profile_sensor_data
 
 class DockingController(Node):
     def __init__(self):
@@ -62,6 +63,10 @@ class DockingController(Node):
             time.sleep(2.0)
 
     def image_callback(self, msg):
+        # [디버깅 1] 함수가 호출되는지 확인
+        # (너무 많이 뜨면 나중에 주석 처리하세요)
+        # self.get_logger().info("📷 영상 수신 중...", throttle_duration_sec=2.0)
+
         # [중요] 내 모드가 아니면 동작 중지
         if self.current_mode != 'DOCKING':
             return
@@ -70,15 +75,22 @@ class DockingController(Node):
         if self.state_mode == 2:
             self.run_gripper_sequence()
             return
+        
         # 완료 상태면 아무것도 안 함
         if self.state_mode == 99 or self.state_mode == 0:
             return
 
         try:
             cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
-        except: return
+        except Exception as e:
+            # [디버깅 2] 변환 에러 확인
+            self.get_logger().error(f"❌ 이미지 변환 실패: {e}")
+            return
 
+        # AI 처리
         result = self.docking_ai.process(cv_image)
+        
+        # 결과 유효성 체크
         if not isinstance(result, (list, tuple)) or len(result) < 2:
             self.stop_robot()
             return
@@ -86,15 +98,18 @@ class DockingController(Node):
         data, frame = result
         found = data.get("found", False)
 
+        # [디버깅 3] AI 결과 확인 (Searching이 안 뜨는 이유 확인)
         if not found:
             if time.time() - self.last_log_time > 2.0:
-                self.get_logger().info("👀 Searching...")
+                self.get_logger().info("👀 Searching... (마커 찾는 중)")
                 self.last_log_time = time.time()
             self.stop_robot()
             return
 
         dist_cm = data.get("dist_cm", 999.9)
         x_cm = data.get("x_cm", 0.0)
+        
+        # 거리값이 None이면 안전하게 처리
         if dist_cm is None: dist_cm = 999.9
 
         # [거리 도달 체크]
@@ -109,7 +124,8 @@ class DockingController(Node):
             self.docking_start_time = time.time() 
         else:
             # 주행 (후진)
-            self.get_logger().info(f"🚗 Approaching... {dist_cm:.1f}cm")
+            # [디버깅 4] 주행 명령이 나가는지 확인
+            self.get_logger().info(f"🚗 Approaching... {dist_cm:.1f}cm (x: {x_cm})")
             twist = Twist()
             twist.linear.x = self.BASE_SPEED
             twist.angular.z = self.KP_STEER * x_cm 
