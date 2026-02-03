@@ -73,11 +73,11 @@ def generate_launch_description():
         output='screen'
     )
     # [추가] 3-6. MQTT 통신 노드 (가볍기 때문에 즉시 실행)
-    node_mqtt = Node(
-        package=pkg_name, executable='mqtt_final.py',
-        name='mqtt_final',
-        output='screen'
-    )
+    # node_mqtt = Node(
+    #     package=pkg_name, executable='mqtt_final.py',
+    #     name='mqtt_final',
+    #     output='screen'
+    # )
 
     # ================= [4. 자율주행 스택 (즉시 실행)] =================
 
@@ -126,7 +126,7 @@ def generate_launch_description():
         node_ydlidar,
         node_rf2o,
         nav2_launch,
-        node_mqtt,      # <--- [중요] 여기에 추가 (TimerAction 아님)
+        # node_mqtt,      # <--- [중요] 여기에 추가 (TimerAction 아님)
         
         # 2. [Applications] 순차 실행 그룹
         # T+15s: 비전 시스템

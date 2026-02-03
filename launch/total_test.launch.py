@@ -50,10 +50,10 @@ def generate_launch_description():
     )
 
     # 3-4. 오도메트리 (위치 추정)
-    # [수정] trailer_nav_launch.py 처럼 name 파라미터 명시 및 즉시 실행으로 변경
+    # [설정] final_launch.py와 동일하게 base_link 기준
     node_rf2o = Node(
         package='rf2o_laser_odometry', executable='rf2o_laser_odometry_node',
-        name='rf2o_laser_odometry', # [중요] 이름 명시
+        name='rf2o_laser_odometry',
         output='screen',
         parameters=[{
             'laser_scan_topic': '/scan', 
@@ -66,53 +66,52 @@ def generate_launch_description():
         }]
     )
     
-    # 3-5. 아커만 모터 드라이버
+    # 3-5. 아커만 모터 드라이버 (Test 버전)
     motor_driver = Node(
         package=pkg_name,
-        executable='ackermann_driver_test.py',
+        executable='ackermann_driver_test.py', # [변경됨] 테스트용 파일
         name='ackermann_driver',
         output='screen'
     )
-    # [추가] 3-6. MQTT 통신 노드 (가볍기 때문에 즉시 실행)
+
+    # 3-6. MQTT 통신 노드 (Test 버전)
     node_mqtt = Node(
-        package=pkg_name, executable='mqtt_total_control_test.py',
+        package=pkg_name, executable='mqtt_total_control_test.py', # [변경됨] 테스트용 파일
         name='mqtt_final',
         output='screen'
     )
 
-    # [4. 자율주행 스택 (Nav2)]
+    # ================= [4. 자율주행 스택 (Nav2)] =================
+    # [중요] final_launch.py처럼 즉시 실행 설정
     nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('nav2_bringup'), 'launch', 'bringup_launch.py')
+            os.path.join(get_package_share_directory(nav2_pkg), 'launch', 'bringup_launch.py')
         ),
         launch_arguments={
             'map': map_file,
             'params_file': nav2_params,
             'use_sim_time': 'false',
-            'autostart': 'true' # 자동으로 노드 활성화
+            'autostart': 'true' 
         }.items()
     )
 
-    # [5. 통합 테스트 컨트롤러 (test_scripts)]
+    # ================= [5. 통합 테스트 컨트롤러 (지연 실행)] =================
+    # 이것들은 Nav2가 켜진 뒤에 켜져야 하므로 10초 뒤 실행
     docking_ctrl = Node(package=pkg_name, executable='docking_controller_test.py', output='screen')
     marshaller_ctrl = Node(package=pkg_name, executable='marshaller_controller_test.py', output='screen')
     driving_ctrl = Node(package=pkg_name, executable='driving_controller_test.py', output='screen')
-    mqtt_ctrl = Node(package=pkg_name, executable='mqtt_total_control_test.py', output='screen')
 
     return LaunchDescription([
-        # 즉시 실행: 로봇 모델 및 하드웨어 베이스
+        # [그룹 1: 즉시 실행] - final_launch.py와 똑같은 순서
         node_robot_state,
         node_joint_state,
         motor_driver,
         node_ydlidar,
         node_rf2o,
-        node_mqtt,
+        nav2_launch,    # <--- [핵심] 여기에 있어야 RViz에서 바로 보임
+        node_mqtt,      # MQTT도 통신 대기를 위해 바로 실행
         
-        # 순차 실행: 하드웨어 안정을 위해 Nav2와 컨트롤러는 지연 실행
-        # Nav2 실행 (라이다 안정화 대기)
-        TimerAction(period=5.0, actions=[nav2_launch]),
-        
-        # 컨트롤러 및 MQTT 실행 (Nav2 기동 대기)
+        # [그룹 2: 지연 실행] - 컨트롤러들
         TimerAction(period=10.0, actions=[
             docking_ctrl,
             marshaller_ctrl,
