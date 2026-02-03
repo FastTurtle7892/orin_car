@@ -91,7 +91,12 @@ class MqttTotalControl(Node):
                 self.current_mode = "IDLE"
                 self.get_logger().info("🔄 Mode Set -> IDLE")
 
-            # 3. 경로 주행 명령
+            # [추가됨] 3. 마샬러(수신호) 주행 명령
+            elif cmd == "MARSHALLER_START":
+                self.current_mode = "MARSHAL"
+                self.get_logger().info("🔄 Mode Set -> MARSHAL (Front Camera ON)")
+
+            # 4. 경로 주행 명령
             elif cmd == "START_PATH":
                 # JSON에서 경로 파일명 추출 ("path", "path_file", "path_files" 다 지원)
                 path_input = data.get("path") or data.get("path_file") or data.get("path_files")

@@ -20,7 +20,7 @@ class DockingController(Node):
         super().__init__('docking_controller')
         
         self.get_logger().info("====================================")
-        self.get_logger().info("🔒 [단일 스레드] 순차 실행 버전 🔒") 
+        self.get_logger().info("🔒 도킹 컨드롤러 시작 🔒") 
         self.get_logger().info("====================================")
 
         # [삭제] 콜백 그룹 제거 (단일 스레드는 기본 그룹 사용)
@@ -71,8 +71,8 @@ class DockingController(Node):
         status = "ON" if (self.cap is not None and self.cap.isOpened()) else "OFF"
         if self.is_camera_loading: status = "LOADING..."
         
-        if self.system_mode == "IDLE":
-            self.get_logger().info(f"💤 대기중 (Camera: {status})", throttle_duration_sec=5.0)
+        #if self.system_mode == "IDLE":
+        #   self.get_logger().info(f"💤 대기중 (Camera: {status})", throttle_duration_sec=5.0)
 
     def mode_callback(self, msg):
         if self.system_mode != msg.data:
