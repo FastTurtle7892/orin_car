@@ -179,7 +179,7 @@ class DockingControllerV2(Node):
             # [테스트 팁]
             # 만약 차가 반대로 튄다면 GAIN 앞에 부호(-)를 붙여보세요.
             # 예: steer = - (x_err * ...) 
-            steer = (x_err * self.GAIN_LATERAL) + (yaw_err * self.GAIN_YAW)
+            steer = -((x_err * self.GAIN_LATERAL) + (yaw_err * self.GAIN_YAW))
             
             # 최대 조향각 제한
             steer = max(min(steer, self.MAX_STEER), -self.MAX_STEER)
@@ -204,7 +204,7 @@ class DockingControllerV2(Node):
         self.execute_grip_sequence()
         
         self.is_docked = True
-        self.system_mode = "IDLE" 
+        #self.system_mode = "IDLE" 
         
         self.manage_camera_resource()
         self.stop_robot()
