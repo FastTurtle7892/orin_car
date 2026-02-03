@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from rclpy.callback_groups import ReentrantCallbackGroup
-from rclpy.executors import MultiThreadedExecutor
+# [삭제] 멀티스레드 관련 라이브러리 제거
+# from rclpy.callback_groups import ReentrantCallbackGroup
+# from rclpy.executors import MultiThreadedExecutor
 from geometry_msgs.msg import Twist
 from std_msgs.msg import String
 import cv2
 import sys
 import time
 import os
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from docking_ai_test import DockingAI
@@ -18,11 +20,19 @@ class DockingController(Node):
         super().__init__('docking_controller')
         
         self.get_logger().info("====================================")
-        self.get_logger().info("🔒 [스레드 안전] 중복 실행 완벽 차단 버전 🔒") 
+        self.get_logger().info("🔒 [단일 스레드] 순차 실행 버전 🔒") 
         self.get_logger().info("====================================")
 
-        self.callback_group = ReentrantCallbackGroup()
+        # [삭제] 콜백 그룹 제거 (단일 스레드는 기본 그룹 사용)
+        # self.callback_group = ReentrantCallbackGroup()
 
+        qos_profile = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            depth=10
+        )
+
+        self.completion_pub = self.create_publisher(String, '/task_completion', 10)
         # 1. ROS 설정
         self.cmd_publisher = self.create_publisher(Twist, '/cmd_vel', 10)
         self.gripper_publisher = self.create_publisher(String, '/gripper_cmd', 10)
@@ -31,28 +41,27 @@ class DockingController(Node):
             String, 
             '/system_mode', 
             self.mode_callback, 
-            10,
-            callback_group=self.callback_group
+            qos_profile
+            # callback_group=self.callback_group [제거]
         )
         
-        self.timer = self.create_timer(0.1, self.timer_callback, callback_group=self.callback_group)
-        self.heartbeat_timer = self.create_timer(5.0, self.heartbeat_callback, callback_group=self.callback_group)
+        # 타이머 설정 (콜백 그룹 인자 제거)
+        self.timer = self.create_timer(0.1, self.timer_callback)
+        self.heartbeat_timer = self.create_timer(5.0, self.heartbeat_callback)
 
         # 2. AI & 카메라 설정
         self.ai = DockingAI()
         self.cap = None 
-        self.camera_port = 3 
+        self.camera_port = 2 
         
-        # [핵심] 중복 방지 플래그들
         self.is_camera_loading = False 
-        self.is_docking_process_started = False # <--- 이거 추가! (도킹 중이면 아무도 못 건드림)
+        self.is_docking_process_started = False
             
-        self.create_timer(1.0, self.send_init_gripper, callback_group=self.callback_group)
+        self.create_timer(1.0, self.send_init_gripper)
         self.is_init_sent = False
 
-        self.TARGET_DIST = 17.5
+        self.TARGET_DIST = 17.0
         self.STOP_TOLERANCE = 1.0 
-        # 속도 살짝 올림 (안 움직이는 문제 방지)
         self.FIXED_SPEED = -0.25 
         
         self.system_mode = "IDLE"
@@ -108,16 +117,15 @@ class DockingController(Node):
 
         # 2. 꺼야 하는 상황
         else:
-            # [수정] NoneType 에러 방지를 위한 꼼꼼한 체크
             if self.cap is not None:
                 self.get_logger().info("💤 카메라 자원 반환 (OFF)")
                 try:
                     if self.cap.isOpened():
                         self.cap.release()
                 except Exception as e:
-                    pass # 이미 닫혀있으면 무시
+                    pass 
                 finally:
-                    self.cap = None # 확실하게 None으로 만듦
+                    self.cap = None
                     self.is_camera_loading = False
 
     def send_init_gripper(self):
@@ -131,6 +139,9 @@ class DockingController(Node):
         self.gripper_publisher.publish(msg)
 
     def execute_grip_sequence(self):
+        # [단일 스레드 특징]
+        # 여기서 time.sleep을 하면 로봇의 모든 기능(통신 포함)이 멈추고 이 동작만 수행합니다.
+        # 오히려 도킹 중에는 이게 더 안전합니다.
         self.get_logger().info("🚀 잡기 시퀀스 시작")
         self.publish_gripper("DOWN"); time.sleep(2.0) 
         self.publish_gripper("GRIP"); time.sleep(2.0)
@@ -138,7 +149,6 @@ class DockingController(Node):
         self.get_logger().info("✅ 잡기 완료")
 
     def timer_callback(self):
-        # 0. 중복 실행 방지 (도킹 동작 중이면 타이머 무시)
         if self.is_docking_process_started:
             return
 
@@ -171,9 +181,7 @@ class DockingController(Node):
 
             error_dist = dist - self.TARGET_DIST
             
-            # 도착 확인
             if abs(error_dist) <= self.STOP_TOLERANCE:
-                # [중요] 여기서 깃발을 꽂습니다! "나 작업 들어간다! 아무도 오지 마!"
                 self.is_docking_process_started = True 
                 self.perform_docking(dist)
                 return
@@ -192,22 +200,26 @@ class DockingController(Node):
 
         self.cmd_publisher.publish(cmd_msg)
 
+    # [2. perform_docking 함수 수정]
     def perform_docking(self, dist):
         self.stop_robot()
         self.get_logger().info(f"🎯 도착 완료! ({dist:.1f}cm)")
         
-        # 여기서 잡기 동작 수행 (시간 걸림)
         self.execute_grip_sequence()
         
         self.is_docked = True
         self.system_mode = "IDLE" 
         
-        # 카메라 끄기
         self.manage_camera_resource()
         self.stop_robot()
         
-        # 모든 작업 끝났으니 깃발 해제 (다음 명령 대기)
-        self.is_docking_process_started = False 
+        # [핵심 추가] MQTT 노드에게 "나 다 끝났어, 그만 보채!" 라고 신호 보내기
+        done_msg = String()
+        done_msg.data = "DOCKING_COMPLETE"
+        self.completion_pub.publish(done_msg)
+        self.get_logger().info("📢 [보고] 도킹 완료 신호 전송 -> MQTT 노드")
+        
+        self.is_docking_process_started = False
 
     def stop_robot(self):
         stop_msg = Twist()
@@ -220,10 +232,10 @@ class DockingController(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = DockingController()
-    executor = MultiThreadedExecutor()
-    executor.add_node(node)
+    
+    # [수정] 멀티스레드 Executor 제거하고 기본 spin 사용
     try:
-        executor.spin()
+        rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:

@@ -112,12 +112,8 @@ def generate_launch_description():
         node_rf2o,
         nav2_launch, 
         node_mqtt,      # MQTT도 통신 대기를 위해 바로 실행
-        
-        # [그룹 2: 지연 실행] - 컨트롤러들
-        TimerAction(period=30.0, actions=[
-            
-            docking_ctrl,
-            #marshaller_ctrl,
-            #driving_ctrl
-        ]),
+
+        docking_ctrl,
+        marshaller_ctrl,
+        driving_ctrl
     ])
