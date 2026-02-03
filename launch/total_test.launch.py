@@ -98,12 +98,13 @@ def generate_launch_description():
 
     # ================= [5. 통합 테스트 컨트롤러 (지연 실행)] =================
     # 이것들은 Nav2가 켜진 뒤에 켜져야 하므로 10초 뒤 실행
-    docking_ctrl = Node(package=pkg_name, executable='docking_controller_test.py', output='screen')
+    
+    # docking_ctrl = Node(package=pkg_name, executable='docking_controller_test.py', output='screen')       // 기존 파일
+    docking_ctrl = Node(package=pkg_name, executable='docking_controller_test_v2.py', output='screen')      // 회전하는거 테스트중
     marshaller_ctrl = Node(package=pkg_name, executable='marshaller_controller_test.py', output='screen')
     driving_ctrl = Node(package=pkg_name, executable='driving_controller_test.py', output='screen')
 
     return LaunchDescription([
-        # [그룹 1: 즉시 실행] - final_launch.py와 똑같은 순서
         
         node_robot_state,
         node_joint_state,
@@ -111,8 +112,7 @@ def generate_launch_description():
         node_ydlidar,
         node_rf2o,
         nav2_launch, 
-        node_mqtt,      # MQTT도 통신 대기를 위해 바로 실행
-
+        node_mqtt,
         docking_ctrl,
         marshaller_ctrl,
         driving_ctrl
