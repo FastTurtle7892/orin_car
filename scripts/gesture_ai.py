@@ -1,19 +1,11 @@
-#!/usr/bin/env python3
-import os
 import cv2
 import numpy as np
 from ultralytics import YOLO
 
 class MarshallerAI:
-    def __init__(self, model_path=None):
-        # 모델 경로 설정
-        if model_path and os.path.exists(model_path):
-            print(f"✅ Loading Model from: {model_path}")
-            self.model = YOLO(model_path)
-        else:
-            print("⚠️ Path not found, trying default 'yolov8n-pose.pt'")
-            self.model = YOLO('yolov8n-pose.pt')
-
+    def __init__(self):
+        self.model = YOLO('yolov8n-pose.engine', task='pose')
+        
         # [상태 관리 변수]
         self.stage = 0 
         self.is_finished = False 
@@ -22,8 +14,8 @@ class MarshallerAI:
         self.trigger_counter = 0
         self.triggered_lock = False 
         
-        self.LIMIT_NORMAL = 15       # 반응 속도 최적화 (기존 20 -> 15)
-        self.LIMIT_RESET  = 40       # 리셋 동작 (약 2.0초)
+        self.LIMIT_NORMAL = 20       # 일반 동작: 약 1.0초
+        self.LIMIT_RESET  = 40       # 리셋 동작: 약 2.0초
 
     def calculate_angle(self, a, b, c):
         a, b, c = np.array(a), np.array(b), np.array(c)
@@ -85,12 +77,9 @@ class MarshallerAI:
         angle_l = self.calculate_angle(l_sh, l_el, l_wr)
         angle_r = self.calculate_angle(r_sh, r_el, r_wr)
         
-        # [신체 비율 계산]
         wrist_dist_x = abs(l_wr[0] - r_wr[0])
         shoulder_width = abs(l_sh[0] - r_sh[0])
-        torso_len = abs(l_hip[1] - l_sh[1])
-        if torso_len < 0.05: torso_len = 0.3 # 힙이 안 보일 경우를 대비한 기본값
-
+        
         current_action = "READY"
         info_text = ""
         bg_color = (245, 117, 16)
@@ -99,19 +88,27 @@ class MarshallerAI:
         global_action_detected = False
 
         # -----------------------------------------------------------------
-        # [GLOBAL 1] RESET (열중쉬어) - 비율 기반 판단
+        # [GLOBAL 1] RESET (열중쉬어) - 조건 강화됨
         # -----------------------------------------------------------------
         has_arms = (kpts_raw[9][2] > 0.6) and (kpts_raw[10][2] > 0.6)
+        has_hips = (kpts_raw[11][2] > 0.6) and (kpts_raw[12][2] > 0.6)
         
-        if has_arms:
-            # 손목 높이가 엉덩이 근처 (몸통 길이의 30% 범위)
-            wrist_near_hip = (l_wr[1] > l_hip[1] - torso_len * 0.3) and (r_wr[1] > r_hip[1] - torso_len * 0.3)
-            # 팔꿈치 벌림
-            elbows_out = abs(l_el[0] - r_el[0]) > shoulder_width * 1.3
-            # 팔 굽힘
+        if has_arms and has_hips:
+            # 1. 손목 위치 수정: 허리 위쪽으로 올려야 함 (Y값이 hip보다 작거나 비슷해야 함)
+            # 기존: abs(diff) < 0.2 (골반 아래 0.2까지 허용했음 -> 차렷과 겹침)
+            # 수정: l_wr[1] < l_hip[1] + 0.05 (골반보다 아주 살짝 아래까지만 허용, 그보다 위여야 함)
+            l_on_waist = (l_wr[1] < l_hip[1] + 0.05) and (l_wr[1] > l_sh[1] + 0.2)
+            r_on_waist = (r_wr[1] < r_hip[1] + 0.05) and (r_wr[1] > r_sh[1] + 0.2)
+            
+            # 2. 팔꿈치 벌림 유지
+            elbow_width = abs(l_el[0] - r_el[0])
+            is_elbows_out = elbow_width > shoulder_width * 1.2 
+            
+            # 3. 팔 굽힘 각도 강화: 150도 -> 140도 미만 (더 확실히 굽혀야 함)
+            # 차렷 자세는 보통 160~180도 나오므로 겹칠 일 없음
             is_bent = (angle_l < 140) and (angle_r < 140)
 
-            if wrist_near_hip and elbows_out and is_bent:
+            if l_on_waist and r_on_waist and is_elbows_out and is_bent:
                 current_action = "RESET"
                 info_text = "HOLD 2s TO RESET"
                 bg_color = (255, 0, 0)
@@ -122,18 +119,16 @@ class MarshallerAI:
         # [GLOBAL 2] STOP (X자)
         # -----------------------------------------------------------------
         if not global_action_detected:
-            is_crossed = abs(l_wr[0] - r_wr[0]) < 0.05
-            # 손 높이가 어깨보다 위
-            hands_up = (l_wr[1] < l_sh[1]) and (r_wr[1] < r_sh[1])
-
-            if is_crossed and hands_up:
-                current_action = "STOP"
-                info_text = "EMERGENCY STOP"
-                bg_color = (0, 0, 255)
+            is_crossed = r_wr[0] > l_wr[0]
+            if is_crossed and (l_wr[1] < l_sh[1] + 0.4):
                 if self.stage == 2 or self.is_finished:
-                    is_triggering = True
-                    info_text = "HOLD TO NEXT STAGE..."
-                global_action_detected = True
+                    current_action = "STOP"
+                    info_text = "EMERGENCY STOP"
+                    bg_color = (0, 0, 255)
+                    if self.stage == 2:
+                        is_triggering = True
+                        info_text = "HOLD TO STAGE 3..."
+                    global_action_detected = True
 
         # -----------------------------------------------------------------
         # [FINISHED] BYE BYE
@@ -148,52 +143,51 @@ class MarshallerAI:
         # [STAGES]
         # -----------------------------------------------------------------
         if not self.is_finished and not global_action_detected:
-            # Stage 0: READY (차렷)
+            # Stage 0: READY
             if self.stage == 0:
-                # 손목이 엉덩이보다 아래 (상대 좌표 사용)
-                is_arms_down = (l_wr[1] > l_hip[1]) and (r_wr[1] > r_hip[1])
+                is_arms_down = (l_wr[1] > l_sh[1] + 0.3) and (r_wr[1] > r_sh[1] + 0.3)
                 is_straight = (angle_l > 150) and (angle_r > 150)
-                is_narrow = wrist_dist_x < shoulder_width * 1.5
-                
+                is_narrow = wrist_dist_x < shoulder_width * 1.25
                 if is_arms_down and is_narrow and is_straight:
                     is_triggering = True; current_action = "READY"; info_text = "HOLD TO START..."
                 else:
-                    current_action = "FACE_ME"; info_text = "STAGE 0: STAND STRAIGHT"; bg_color = (100, 100, 100)
+                    current_action = "FACE_ME"; info_text = "STAGE 0: WAITING..."; bg_color = (100, 100, 100)
 
             # Stage 1: MOVE
             elif self.stage == 1:
-                # 두 손 들기 (다음 단계)
-                hands_up_shoulder = (l_wr[1] < l_sh[1]) and (r_wr[1] < r_sh[1])
-                hands_wide = abs(l_wr[0] - r_wr[0]) > shoulder_width * 1.5
-                
-                if hands_up_shoulder and hands_wide:
+                l_diff = l_wr[1] - l_sh[1]; r_diff = r_wr[1] - r_sh[1]
+                is_fast = (l_diff > 0.25 and r_diff > 0.25) and (wrist_dist_x > shoulder_width * 1.4)
+                if is_fast:
                     is_triggering = True; current_action = "APPROACHING"; info_text = "HOLD TO STAGE 2..."
-                
-                # 방향 지시 (한 손 들기)
-                elif l_wr[1] < l_sh[1] and r_wr[1] > r_sh[1]: current_action = "TURN_RIGHT"
-                elif r_wr[1] < r_sh[1] and l_wr[1] > l_sh[1]: current_action = "TURN_LEFT"
-                elif (angle_l < 100 and angle_r < 100) and not hands_up_shoulder: current_action = "FORWARD"
-                else: current_action = "STAGE_1"; info_text = "GUIDE THE CAR"
+                elif abs(l_el[1]-l_sh[1])<0.2 and l_wr[1]<l_el[1] and angle_l<120 and angle_r<120: current_action = "FORWARD"
+                elif abs(l_el[1]-l_sh[1])<0.2 and l_wr[1]<l_el[1] and r_wr[1]>r_sh[1]+0.2: current_action = "TURN_LEFT"
+                elif abs(r_el[1]-r_sh[1])<0.2 and r_wr[1]<r_el[1] and l_wr[1]>l_sh[1]+0.2: current_action = "TURN_RIGHT"
+                else: current_action = "STAGE_1"; info_text = "FWD / LEFT / RIGHT"
 
             # Stage 2: APPROACH & STOP
             elif self.stage == 2:
-                # 팔 각도에 따른 속도 제어
-                if angle_l > 150 and angle_r > 150: current_action = "APPROACHING"; info_text = "SPEED: SLOW (ARMS DOWN)"
-                else: current_action = "APPROACHING"; info_text = "SPEED: FAST (ARMS UP)"
+                # STOP은 Global에서 처리됨
+                l_diff = l_wr[1] - l_sh[1]; r_diff = r_wr[1] - r_sh[1]
+                if abs(l_diff)<0.25 and abs(r_diff)<0.25: current_action = "APPROACHING"; info_text = "SPEED: NORMAL"
+                elif angle_l>120 and angle_r>120 and l_wr[1]<l_sh[1]: current_action = "APPROACHING"; info_text = "SPEED: SLOW"
+                elif (l_diff>0.25 and r_diff>0.25) and (wrist_dist_x>shoulder_width*1.4): current_action = "APPROACHING"; info_text = "SPEED: FAST"
+                else: current_action = "STAGE_2"; info_text = "APPROACH ONLY"
 
             # Stage 3: GRIPPER HOLD
             elif self.stage == 3:
                 in_chest = (l_wr[1] > l_sh[1]) and (l_wr[1] < l_hip[1])
-                is_hold = in_chest and (wrist_dist_x < shoulder_width * 0.8)
+                is_hold = in_chest and (wrist_dist_x < shoulder_width * 0.6)
                 if is_hold: is_triggering = True; current_action = "GRIPPER_HOLD"; info_text = "HOLD TO STAGE 4..."
-                else: current_action = "STAGE_3"; info_text = "GATHER HANDS TO GRIP"
+                else:
+                    if (l_wr[1]<l_sh[1] and r_wr[1]>r_sh[1]) or (r_wr[1]<r_sh[1] and l_wr[1]>l_sh[1]): current_action = "SET_BRAKES"
+                    else: current_action = "STAGE_3"; info_text = "BRAKES ONLY"
 
             # Stage 4: GRIPPER RELEASE -> EXIT
             elif self.stage == 4:
                 in_chest = (l_wr[1] > l_sh[1]) and (l_wr[1] < l_hip[1])
-                is_release = in_chest and (wrist_dist_x > shoulder_width * 1.2)
+                is_release = in_chest and (wrist_dist_x > shoulder_width * 0.8)
                 if is_release: is_triggering = True; current_action = "GRIPPER_RELEASE"; info_text = "HOLD TO FINISH..."
-                elif wrist_dist_x < shoulder_width * 0.8: current_action = "GRIPPER_HOLD"
+                elif wrist_dist_x < shoulder_width * 0.6: current_action = "GRIPPER_HOLD"
                 else: current_action = "STAGE_4"; info_text = "OPEN ARMS TO FINISH"
 
         # -----------------------------------------------------------------
