@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
@@ -15,8 +16,9 @@ class MarshallerController(Node):
         super().__init__('marshaller_controller')
         
         self.get_logger().info("====================================")
-        self.get_logger().info("🚀 마샬러 차량 제어 시작 🚀") 
+        self.get_logger().info("🚀 마샬러 차량 제어 (State Machine Ver) 시작 🚀") 
         self.get_logger().info("====================================")
+        
         # 1. Pub/Sub 설정
         self.mode_sub = self.create_subscription(
             String, '/system_mode', self.mode_callback, 10
@@ -26,25 +28,29 @@ class MarshallerController(Node):
         self.debug_pub = self.create_publisher(Image, '/marshaller/debug_image', 10)
 
         # 2. 상태 및 객체 초기화
-        self.current_mode = "WAITING"  # 초기 상태
+        self.current_mode = "WAITING"   # 시스템 모드
+        self.drive_state = "STOP"       # [NEW] 주행 상태 기억 변수 (초기값 정지)
+        
         self.bridge = CvBridge()
         self.cap = None
         self.marshaller_ai = None
-        self.wait_tick = 0 # 대기 로그 카운터
+        self.wait_tick = 0 
         
-        # 전방 카메라 인덱스 (도킹이 2번이면, 전방은 보통 0번)
+        # 전방 카메라 인덱스
         self.CAMERA_INDEX = 0 
         
         # 주기적 실행 (0.1초 단위)
         self.timer = self.create_timer(0.1, self.control_loop)
         
-        self.get_logger().info("✅ Marshaller Controller Initialized (Log Enhanced Version)")
+        self.get_logger().info("✅ Marshaller Controller Initialized")
 
     def mode_callback(self, msg):
         previous_mode = self.current_mode
         self.current_mode = msg.data
         if previous_mode != self.current_mode:
             self.get_logger().info(f"🔄 모드 변경 감지: {previous_mode} -> {self.current_mode}")
+            # 모드가 바뀌면 주행 상태도 안전하게 정지로 초기화
+            self.drive_state = "STOP"
 
     def open_camera(self):
         """카메라가 닫혀있으면 열기"""
@@ -52,7 +58,6 @@ class MarshallerController(Node):
             self.get_logger().info(f"📷 Opening Front Camera ({self.CAMERA_INDEX})...")
             self.cap = cv2.VideoCapture(self.CAMERA_INDEX)
             
-            # 해상도 및 FPS 설정 (Jetson 부하 줄이기)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             self.cap.set(cv2.CAP_PROP_FPS, 20)
@@ -62,7 +67,6 @@ class MarshallerController(Node):
                 self.cap = None
             else:
                 self.get_logger().info("✅ Camera Open Success")
-                # AI 모델도 카메라 켤 때 초기화 (또는 미리 로드)
                 if self.marshaller_ai is None:
                     try:
                         self.marshaller_ai = MarshallerAI()
@@ -81,10 +85,7 @@ class MarshallerController(Node):
         # 1. MARSHAL 모드가 아니면 카메라 끄고 대기
         if self.current_mode != "MARSHAL":
             self.close_camera()
-            # 2초(20틱)마다 생존 신고 로그
             self.wait_tick += 1
-            #if self.wait_tick % 20 == 0:
-            #    self.get_logger().info(f"💤 대기중... (현재 모드: {self.current_mode} / 'MARSHAL' 기다림)")
             return
 
         self.wait_tick = 0
@@ -98,71 +99,77 @@ class MarshallerController(Node):
             self.get_logger().warn("⚠️ Camera Read Error", throttle_duration_sec=2.0)
             return
 
-        # 3. AI 추론 및 행동 결정
+        # 3. AI 추론
         action, out_frame = self.marshaller_ai.detect_gesture(frame)
 
-        # [로그 강화] AI가 감지한 액션 실시간 확인 (SKIP, IDLE은 가끔, 나머지는 즉시)
-        if action not in ["SKIP", "IDLE"]:
-            self.get_logger().info(f"👀 AI 감지 성공: [{action}]")
-        else:
-            # 아무것도 안 잡혀도 시스템이 도는지 확인하기 위해 2초마다 로그 출력
-            self.get_logger().info(f"👀 제스처 찾는 중... (현재: {action})", throttle_duration_sec=2.0)
-
-        # 4. 행동에 따른 차량 제어 (cmd_vel)
-        twist = Twist()
-        should_publish = True
+        # =========================================================
+        # [핵심 변경] 상태 기반 로직 (State Machine)
+        # =========================================================
         
-        if action == "FORWARD":
-            twist.linear.x = 0.3
-            self.get_logger().info(f"🚗 [GO] 전진 명령 생성 (v=0.2)")
-            
-        elif action == "BACKWARD":
-            twist.linear.x = -0.3
-            self.get_logger().info(f"🚗 [BACK] 후진 명령 생성 (v=-0.2)")
-            
-        elif action == "LEFT":
-            twist.angular.z = 0.5
-            self.get_logger().info(f"🔄 [LEFT] 좌회전 명령 생성")
-            
-        elif action == "RIGHT":
-            twist.angular.z = -0.5
-            self.get_logger().info(f"🔄 [RIGHT] 우회전 명령 생성")
-            
-        elif action == "STOP":
-            twist.linear.x = 0.0
-            twist.angular.z = 0.0
-            # 정지 명령은 너무 자주 뜨면 시끄러우니 1초에 한번만
-            self.get_logger().info(f"🛑 [STOP] 정지 명령", throttle_duration_sec=1.0)
-            
-        elif action == "MANUAL_MODE":
-            self.get_logger().info("🙌 수동 모드(MANUAL_DRIVE) 진입 - 제스처 대기 중", throttle_duration_sec=2.0)
-            should_publish = False # MANUAL_MODE 자체는 움직임 명령이 아님
-            
-        elif action == "DOCKING":
+        # 상태를 변경시킬 수 있는 유효한 명령어 목록
+        valid_commands = ["FORWARD", "BACKWARD", "LEFT", "RIGHT", "STOP", "MANUAL_MODE"]
+        
+        # A. 도킹 명령은 최우선 처리 (상태와 무관하게 즉시 종료 로직 수행)
+        if action == "DOCKING":
             self.get_logger().info("🚀 [EVENT] 도킹 명령 수신! 도킹 모드로 전환합니다.")
             
-            # 1. 차량 정지
             stop_msg = Twist()
-            self.cmd_vel_pub.publish(stop_msg)
+            self.cmd_vel_pub.publish(stop_msg) # 즉시 정지
             
-            # 2. 시스템 모드 변경
             mode_msg = String()
             mode_msg.data = "DOCKING"
             self.mode_pub.publish(mode_msg)
             
-            # 3. 카메라 해제 및 종료
             self.close_camera()
-            return  # 루프 종료
+            return
 
-        # 제어 명령 발행 및 확인
+        # B. 유효한 제스처가 감지되면 상태 업데이트 (Latching)
+        #    (IDLE이나 SKIP인 경우, 이 블록을 건너뛰어 기존 self.drive_state 유지)
+        if action in valid_commands:
+            if self.drive_state != action:
+                self.get_logger().info(f"🔄 상태 변경: [{self.drive_state}] ➔ [{action}]")
+                self.drive_state = action
+        
+        # C. 현재 상태(self.drive_state)에 맞춰 차량 제어
+        twist = Twist()
+        should_publish = True
+        
+        if self.drive_state == "FORWARD":
+            twist.linear.x = 0.35
+            self.get_logger().info(f"🚗 [GO] 전진 중... (Action: {action})", throttle_duration_sec=2.0)
+            
+        elif self.drive_state == "BACKWARD":
+            twist.linear.x = -0.35
+            self.get_logger().info(f"🚗 [BACK] 후진 중... (Action: {action})", throttle_duration_sec=2.0)
+            
+        elif self.drive_state == "LEFT":
+            twist.angular.z = 0.5
+            self.get_logger().info(f"🔄 [LEFT] 좌회전 중... (Action: {action})", throttle_duration_sec=2.0)
+            
+        elif self.drive_state == "RIGHT":
+            twist.angular.z = -0.5
+            self.get_logger().info(f"🔄 [RIGHT] 우회전 중... (Action: {action})", throttle_duration_sec=2.0)
+            
+        elif self.drive_state == "STOP":
+            twist.linear.x = 0.0
+            twist.angular.z = 0.0
+            # 정지 상태 로그는 가끔 출력
+            self.get_logger().info(f"🛑 [STOP] 대기 중...", throttle_duration_sec=5.0)
+            
+        elif self.drive_state == "MANUAL_MODE":
+            # 수동 모드 상태에서는 제어 명령을 보내지 않음 (혹은 0을 보냄)
+            should_publish = False 
+            self.get_logger().info("🙌 수동 모드 유지 중...", throttle_duration_sec=5.0)
+            
+        # 제어 명령 발행
         if should_publish:
             self.cmd_vel_pub.publish(twist)
-            # 실제로 속도가 있을 때만 추가 로그 (확실한 디버깅용)
-            if twist.linear.x != 0.0 or twist.angular.z != 0.0:
-                 self.get_logger().info(f"📡 CMD 전송됨 -> Lin:{twist.linear.x:.1f}, Ang:{twist.angular.z:.1f}")
 
-        # 5. 디버그 이미지 발행
+        # 5. 디버그 이미지 발행 (화면에 현재 상태 표시)
         if self.debug_pub.get_subscription_count() > 0:
+            # 이미지에 현재 상태 텍스트 추가
+            cv2.putText(out_frame, f"STATE: {self.drive_state}", (10, 30), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
             msg = self.bridge.cv2_to_imgmsg(out_frame, encoding="bgr8")
             self.debug_pub.publish(msg)
 
