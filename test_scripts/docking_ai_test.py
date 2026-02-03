@@ -12,6 +12,9 @@ class DockingAI:
         # [거리 보정]
         self.DIST_SCALE = 1.45    
         self.DIST_OFFSET = -1.5   
+        
+        # [최적화 설정] 
+        self.PROCESS_SCALE = 0.5 
 
         # ArUco 설정
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(self.target_dict)
@@ -61,10 +64,21 @@ class DockingAI:
 
     def process(self, frame):
         h, w, _ = frame.shape
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        
+        # [최적화 1] 이미지 크기 축소
+        small_frame = cv2.resize(frame, (0, 0), fx=self.PROCESS_SCALE, fy=self.PROCESS_SCALE)
+        gray = cv2.cvtColor(small_frame, cv2.COLOR_BGR2GRAY)
         
         corners, ids, rejected = self.detector.detectMarkers(gray)
         
+        # [핵심 수정] 튜플을 리스트로 변환해야 수정 가능! (TypeError 해결)
+        corners = list(corners) 
+
+        # [최적화 2] 검출된 좌표를 다시 원본 크기로 복구
+        if corners:
+            for i in range(len(corners)):
+                corners[i] = corners[i] * (1.0 / self.PROCESS_SCALE)
+
         data = { "found": False, "id": -1, "dist_cm": 0.0, "x_cm": 0.0, "roll": 0.0, "pitch": 0.0, "yaw": 0.0, "center": (0, 0) }
 
         best_marker_idx = -1
@@ -125,8 +139,8 @@ class DockingAI:
             data["center"] = (cx, cy)
             data["yaw"] = raw_yaw 
 
+            # [디버깅] 시각화
             cv2.aruco.drawDetectedMarkers(frame, corners, ids)
-            
             try:
                 cv2.drawFrameAxes(frame, self.camera_matrix, self.dist_coeffs, best_rvec, best_tvec, self.MARKER_SIZE * 0.8)
             except:

@@ -104,18 +104,20 @@ def generate_launch_description():
 
     return LaunchDescription([
         # [그룹 1: 즉시 실행] - final_launch.py와 똑같은 순서
+        
         node_robot_state,
         node_joint_state,
         motor_driver,
         node_ydlidar,
         node_rf2o,
-        nav2_launch,    # <--- [핵심] 여기에 있어야 RViz에서 바로 보임
+        nav2_launch, 
         node_mqtt,      # MQTT도 통신 대기를 위해 바로 실행
         
         # [그룹 2: 지연 실행] - 컨트롤러들
-        TimerAction(period=10.0, actions=[
+        TimerAction(period=30.0, actions=[
+            
             docking_ctrl,
-            marshaller_ctrl,
-            driving_ctrl
+            #marshaller_ctrl,
+            #driving_ctrl
         ]),
     ])

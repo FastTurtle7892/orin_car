@@ -7,27 +7,26 @@ import paho.mqtt.client as mqtt
 import threading
 import ssl
 
-# ==========================================
-# [설정] MQTT 정보 (본인 환경에 맞게 수정)
-# ==========================================
-MQTT_BROKER = "autowingcar.o-r.kr"
-MQTT_PORT = 8883
-CAR_ID = "car01"
-TOPIC_CMD = f"autowing_car/v1/{CAR_ID}/cmd"
-TOPIC_LOG = f"autowing_car/v1/{CAR_ID}/monitoring"
-
 class MqttTotalControl(Node):
     def __init__(self):
         super().__init__('mqtt_total_control')
         
-        # 1. ROS2 퍼블리셔
-        self.mode_pub = self.create_publisher(String, '/system_mode', 10)
-        self.path_pub = self.create_publisher(String, '/driving/path_cmd', 10)
-
-        # 2. MQTT 클라이언트
-        self.client = mqtt.Client(client_id=CAR_ID, protocol=mqtt.MQTTv311)
+        # [확인용] 이 로그가 반드시 떠야 합니다!
+        self.get_logger().info("========================================")
+        self.get_logger().info("📢 [MQTT] 확성기 모드 (0.5초 반복 발송) 📢")
+        self.get_logger().info("========================================")
         
-        # SSL 설정 (필요 없으면 주석 처리)
+        # 기본 QoS (Reliable)
+        self.mode_pub = self.create_publisher(String, '/system_mode', 10)
+        self.path_pub = self.create_publisher(String, '/driving/path_cmd', 10) # 경로용
+        
+        self.current_mode = "IDLE"
+        
+        # [핵심] 0.5초마다 무조건 상태를 방송 (Nav2가 시끄러워도 뚫고 지나감)
+        self.create_timer(0.5, self.publish_mode_periodic)
+
+        # MQTT 설정
+        self.client = mqtt.Client(client_id="car01", protocol=mqtt.MQTTv311)
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
@@ -36,18 +35,22 @@ class MqttTotalControl(Node):
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
 
-        # 3. 연결 시작
         try:
-            self.client.connect(MQTT_BROKER, MQTT_PORT, 60)
+            self.client.connect("autowingcar.o-r.kr", 8883, 60)
             threading.Thread(target=self.client.loop_forever, daemon=True).start()
-            self.get_logger().info(f"✅ MQTT Connected to {MQTT_BROKER}")
+            self.get_logger().info("✅ MQTT Connected")
         except Exception as e:
             self.get_logger().error(f"❌ MQTT Connection Failed: {e}")
 
     def on_connect(self, client, userdata, flags, rc):
-        client.subscribe(TOPIC_CMD)
-        self.get_logger().info(f"📡 Listening on {TOPIC_CMD}")
-        self.change_mode("IDLE")  # 시작 시 대기 모드
+        client.subscribe("autowing_car/v1/car01/cmd")
+        self.get_logger().info("📡 Listening for Commands...")
+
+    def publish_mode_periodic(self):
+        # 현재 상태를 계속 ROS2 토픽으로 쏩니다.
+        msg = String()
+        msg.data = self.current_mode
+        self.mode_pub.publish(msg)
 
     def on_message(self, client, userdata, msg):
         try:
@@ -57,30 +60,19 @@ class MqttTotalControl(Node):
             self.get_logger().info(f"📩 CMD Received: {cmd}")
 
             if cmd == "DOCKING_START":
-                self.change_mode("DOCKING")
-            
-            elif cmd == "MARSHALLER_START":
-                self.change_mode("MARSHALLER")
-            
-            elif cmd == "START_PATH":
-                # 주행 모드로 변경 후 경로 전달
-                self.change_mode("DRIVING")
-                path_data = data.get("path") # 문자열 or 리스트
-                if path_data:
-                    # JSON 그대로 다시 문자열로 말아서 보냄
-                    self.path_pub.publish(String(data=json.dumps(path_data)))
-            
+                self.current_mode = "DOCKING"
+                self.get_logger().info("🔄 Mode Set -> DOCKING")
             elif cmd == "STOP":
-                self.change_mode("IDLE")
+                self.current_mode = "IDLE"
+                self.get_logger().info("🔄 Mode Set -> IDLE")
+            # [추가] 경로 주행 명령
+            elif cmd == "START_PATH":
+                self.current_mode = "DRIVING"
+                self.get_logger().info("🔄 Mode Set -> DRIVING")
+                # 경로 데이터가 있다면 별도 처리 가능
                 
         except Exception as e:
             self.get_logger().error(f"Parsing Error: {e}")
-
-    def change_mode(self, mode):
-        self.mode_pub.publish(String(data=mode))
-        # 모니터링 토픽으로 상태 전송
-        self.client.publish(TOPIC_LOG, json.dumps({"status": f"Mode changed to {mode}"}))
-        self.get_logger().info(f"🔄 System Mode -> {mode}")
 
 def main(args=None):
     rclpy.init(args=args)

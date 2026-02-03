@@ -11,27 +11,24 @@ class DockingAI:
         self.TARGET_ID = 0      # 목표 마커 ID
         self.target_dict = cv2.aruco.DICT_6X6_250 
         
-        # [거리 보정] (10~30cm 구간 최적화 값)
+        # [거리 보정] (10~30cm 구간 정밀 보정)
         self.DIST_SCALE = 1.45   
         self.DIST_OFFSET = -1.5  
 
-        # [최적화 1] 프레임 스킵 (CPU 부하 감소)
+        # [핵심 최적화 1] 프레임 스킵 (CPU 부하 감소)
         self.frame_count = 0
-        self.PROCESS_INTERVAL = 4  # 4프레임 중 1번만 연산 (약 7.5fps)
+        self.PROCESS_INTERVAL = 4  # 4프레임 중 1번만 연산 (30fps -> 7.5fps 처리)
 
-        # [최적화 2] ROI 설정 (상단 + 좌우 잘라내기)
-        # 예: Y=0.4 (상단 40% 버림), X=0.2 (좌우 20%씩 버림 -> 중앙 60%만 봄)
+        # [핵심 최적화 2] Super ROI 설정 (불필요한 배경 제거)
+        # 상단 40% 버림 (바닥만 봄)
         self.ROI_Y_START_RATIO = 0.4 
+        # 좌우 20%씩 버림 (로봇 정면만 집중, 양옆 노이즈 제거)
         self.ROI_X_MARGIN_RATIO = 0.2
 
         # ArUco 설정
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(self.target_dict)
         self.parameters = cv2.aruco.DetectorParameters()
-
-        # [최적화 3] 파라미터 튜닝 (1.1cm 마커용)
-        self.parameters.minMarkerPerimeterRate = 0.02 
         self.parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX 
-        self.parameters.adaptiveThreshWinSizeStep = 8 
         
         self.detector = cv2.aruco.ArucoDetector(self.aruco_dict, self.parameters)
 
@@ -64,7 +61,6 @@ class DockingAI:
         self.ALPHA = 0.3 # 스무딩 계수
 
     def euler_from_quaternion(self, rvec):
-        """Rodrigues 벡터를 Euler 각도로 변환"""
         rmat, _ = cv2.Rodrigues(rvec)
         sy = math.sqrt(rmat[0,0] * rmat[0,0] +  rmat[1,0] * rmat[1,0])
         if sy < 1e-6:
@@ -81,27 +77,27 @@ class DockingAI:
         h, w, _ = frame.shape
         self.frame_count += 1
         
-        # [최적화 1] Interval Check
+        # [최적화 1] Interval Check (쉬는 타임)
         if self.frame_count % self.PROCESS_INTERVAL != 0:
-            return self._draw_ui(frame, self.last_data)
+            return self.last_data, self._draw_roi_box(frame)
 
         # [최적화 2] ROI 계산 (상단 + 좌우 자르기)
         y_start = int(h * self.ROI_Y_START_RATIO)
         x_start = int(w * self.ROI_X_MARGIN_RATIO)
         x_end   = int(w * (1 - self.ROI_X_MARGIN_RATIO))
         
-        # 슬라이싱 (여기서 이미지가 작아짐 -> 연산 속도 UP)
+        # 이미지 자르기 (연산량 약 64% 감소)
         roi_frame = frame[y_start:h, x_start:x_end]
         roi_gray = cv2.cvtColor(roi_frame, cv2.COLOR_BGR2GRAY)
 
         # 마커 검출
         corners, ids, rejected = self.detector.detectMarkers(roi_gray)
         
-        # [중요] 좌표 보정: ROI 기준 좌표를 원본 화면(frame) 기준으로 복구
+        # [중요] 좌표 보정: 잘린 이미지 좌표 -> 원본 좌표로 복구
         if ids is not None:
             for corner in corners:
-                corner[:, :, 0] += x_start # X좌표 오프셋 복구
-                corner[:, :, 1] += y_start # Y좌표 오프셋 복구
+                corner[:, :, 0] += x_start # X좌표 복구
+                corner[:, :, 1] += y_start # Y좌표 복구
 
         # 데이터 처리 (이하 로직은 원본 좌표계 기준이므로 동일)
         data = { "found": False, "id": -1, "dist_cm": 0.0, "x_cm": 0.0, "yaw": 0.0, "roll": 0.0, "pitch": 0.0, "center": (0, 0) }
@@ -126,19 +122,10 @@ class DockingAI:
                         flags=cv2.SOLVEPNP_IPPE_SQUARE
                     )
 
-                    # Ambiguity 해결
+                    # Ambiguity 해결 및 스무딩
                     final_rvec = rvecs[0]
                     final_tvec = tvecs[0]
                     
-                    if marker_id in self.tracking_data:
-                        prev_rvec = self.tracking_data[marker_id]['rvec']
-                        diff0 = abs(rvecs[0] - prev_rvec).sum()
-                        diff1 = abs(rvecs[1] - prev_rvec).sum() if len(rvecs) > 1 else 9999
-                        if diff1 < diff0:
-                            final_rvec = rvecs[1]
-                            final_tvec = tvecs[1]
-                    
-                    # 스무딩
                     if marker_id in self.tracking_data:
                         last_rvec = self.tracking_data[marker_id]['rvec']
                         last_tvec = self.tracking_data[marker_id]['tvec']
@@ -165,49 +152,19 @@ class DockingAI:
             data["roll"], data["pitch"], raw_yaw = self.euler_from_quaternion(best_rvec)
             data["yaw"] = raw_yaw 
             
-            cx = int(corners[best_marker_idx][0][:, 0].mean())
-            cy = int(corners[best_marker_idx][0][:, 1].mean())
-            data["center"] = (cx, cy)
-
-            # 시각화 (원본 프레임에 그림)
+            # 시각화 (원본 프레임에 그림) - Headless여도 나중에 디버깅을 위해 코드 유지
             cv2.aruco.drawDetectedMarkers(frame, corners, ids)
             cv2.drawFrameAxes(frame, self.camera_matrix, self.dist_coeffs, best_rvec, best_tvec, self.MARKER_SIZE * 1.5)
 
         self.last_data = data
-        return self._draw_ui(frame, data)
+        return data, self._draw_roi_box(frame)
 
-    def _draw_ui(self, frame, data):
-        """UI 그리기 및 ROI 박스 표시"""
+    def _draw_roi_box(self, frame):
+        """디버깅용: 실제 연산하는 영역을 파란 박스로 표시"""
         h, w, _ = frame.shape
-        box_width, box_height = 260, 190
-        box_x, box_y = w - box_width, h - box_height
-
-        overlay = frame.copy()
-        cv2.rectangle(overlay, (box_x, box_y), (w, h), (0, 0, 0), -1)
-        cv2.addWeighted(overlay, 0.6, frame, 0.4, 0, frame)
-
-        # 텍스트 색상
-        dist_col = (0, 255, 0) if (7.5 <= data["dist_cm"] <= 9.5) else (0, 255, 255)
-        yaw_col = (0, 255, 0) if abs(data["yaw"]) <= 0.5 else (0, 255, 255)
-        x_col    = (0, 255, 0) if abs(data["x_cm"]) <= 0.1 else (0, 255, 255)
-        
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        
-        if data["found"]:
-            cv2.putText(frame, f"ID: {data['id']}", (box_x+10, box_y+30), font, 0.8, (0,255,255), 2)
-            cv2.putText(frame, f"Dist : {data['dist_cm']:.1f} cm", (box_x+10, box_y+65), font, 0.7, dist_col, 2)
-            cv2.putText(frame, f"Yaw  : {data['yaw']:.1f} deg", (box_x+10, box_y+100), font, 0.7, yaw_col, 2)
-            cv2.putText(frame, f"X    : {data['x_cm']:.2f} cm", (box_x+10, box_y+135), font, 0.7, x_col, 2)
-            cv2.putText(frame, f"P:{data['pitch']:.1f} R:{data['roll']:.1f}", (box_x+10, box_y+165), font, 0.6, (200,200,200), 1)
-        else:
-            cv2.putText(frame, "SEARCHING...", (box_x+10, box_y+100), font, 0.8, (0,0,255), 2)
-
-        # [디버깅] ROI 영역 파란색 박스로 표시
         y_start = int(h * self.ROI_Y_START_RATIO)
         x_start = int(w * self.ROI_X_MARGIN_RATIO)
         x_end   = int(w * (1 - self.ROI_X_MARGIN_RATIO))
         
         cv2.rectangle(frame, (x_start, y_start), (x_end, h), (255, 0, 0), 2)
-        cv2.putText(frame, "ROI AREA", (x_start + 5, y_start + 20), font, 0.5, (255, 0, 0), 1)
-
-        return data, frame
+        return frame
