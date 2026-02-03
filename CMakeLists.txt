@@ -26,22 +26,13 @@ install(PROGRAMS
 )
 
 install(PROGRAMS
-  final_scripts/docking_controller_final.py
-  final_scripts/driving_controller_final.py
-  final_scripts/marshaller_controller_final.py
-  final_scripts/mqtt_final.py
-  final_scripts/vision_final.py
-  DESTINATION lib/${PROJECT_NAME}
-)
-
-install(PROGRAMS
-  test_scripts/mqtt_total_control.py
-  test_scripts/docking_controller.py
-  test_scripts/marshaller_controller.py
-  test_scripts/driving_controller.py
-  test_scripts/ackermann_driver.py
-  test_scripts/docking_ai.py
-  test_scripts/gesture_ai.py
+  test_scripts/mqtt_total_control_test.py
+  test_scripts/docking_controller_test.py
+  test_scripts/marshaller_controller_test.py
+  test_scripts/driving_controller_test.py
+  test_scripts/ackermann_driver_test.py
+  test_scripts/docking_ai_test.py
+  test_scripts/gesture_ai_test.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
