@@ -33,7 +33,6 @@ except Exception:  # pragma: no cover
     # 개발 중 "python3 video_stack.py"로 돌릴 때를 위한 최소 fallback
     from gesture_ai_test import MarshallerAI
 
-
 class MarshallerControllerSharedCam(Node):
     """
     기존 marshaller_controller_test.py의 구조를 최대한 유지하되,

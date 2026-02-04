@@ -26,7 +26,7 @@ except Exception:
 # Config (ENV)
 # -------------------------------
 WEBRTC_HOST = os.environ.get("WEBRTC_HOST", "autowingcar.o-r.kr")
-WEBRTC_PORT = str(os.environ.get("WEBRTC_PORT", "8443"))
+WEBRTC_PORT = str(os.environ.get("WEBRTC_PORT", "443"))
 
 LOGIN_EMAIL = os.environ.get("LOGIN_EMAIL", "pilot@atc.com")
 LOGIN_PW    = os.environ.get("LOGIN_PW", "1234")
