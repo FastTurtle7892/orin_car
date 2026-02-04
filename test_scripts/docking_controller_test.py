@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-# [삭제] 멀티스레드 관련 라이브러리 제거
-# from rclpy.callback_groups import ReentrantCallbackGroup
-# from rclpy.executors import MultiThreadedExecutor
 from geometry_msgs.msg import Twist
 from std_msgs.msg import String
+from sensor_msgs.msg import Image  # 이미지 수신용
+from cv_bridge import CvBridge     # 변환용
 import cv2
 import sys
 import time
 import os
-from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
-
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, QoSDurabilityPolicy
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from docking_ai_test import DockingAI
 
@@ -20,59 +18,64 @@ class DockingController(Node):
         super().__init__('docking_controller')
         
         self.get_logger().info("====================================")
-        self.get_logger().info("🔒 도킹 컨드롤러 시작 🔒") 
+        self.get_logger().info("🔒 도킹 컨트롤러 (수신기 모드) 시작 🔒") 
         self.get_logger().info("====================================")
-
-        # [삭제] 콜백 그룹 제거 (단일 스레드는 기본 그룹 사용)
-        # self.callback_group = ReentrantCallbackGroup()
 
         qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
             depth=10
         )
+        
+        qos_profile_sensor = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=QoSDurabilityPolicy.VOLATILE,
+            depth=1
+        )
 
         self.completion_pub = self.create_publisher(String, '/task_completion', 10)
-        # 1. ROS 설정
         self.cmd_publisher = self.create_publisher(Twist, '/cmd_vel', 10)
         self.gripper_publisher = self.create_publisher(String, '/gripper_cmd', 10)
         
+        # 시스템 모드 구독
         self.mode_sub = self.create_subscription(
             String, 
             '/system_mode', 
             self.mode_callback, 
             qos_profile
-            # callback_group=self.callback_group [제거]
         )
         
-        # 타이머 설정 (콜백 그룹 인자 제거)
-        self.timer = self.create_timer(0.1, self.timer_callback)
-        self.heartbeat_timer = self.create_timer(5.0, self.heartbeat_callback)
+        # ✅ [핵심 변경] 카메라 직접 여는 대신 video_stack이 주는 이미지 구독
+        self.img_sub = self.create_subscription(
+            Image,
+            '/camera/rear/raw',
+            self.image_callback,
+            qos_profile_sensor
+        )
+        self.bridge = CvBridge()
+        self.latest_frame = None
 
-        # 2. AI & 카메라 설정
+        self.timer = self.create_timer(0.1, self.timer_callback)
+
         self.ai = DockingAI()
-        self.cap = None 
-        self.camera_port = 2 
         
-        self.is_camera_loading = False 
         self.is_docking_process_started = False
-            
         self.create_timer(1.0, self.send_init_gripper)
         self.is_init_sent = False
 
-        self.TARGET_DIST = 17.0
+        self.TARGET_DIST = 16.5
         self.STOP_TOLERANCE = 1.0 
         self.FIXED_SPEED = -0.25 
         
         self.system_mode = "IDLE"
         self.is_docked = False
 
-    def heartbeat_callback(self):
-        status = "ON" if (self.cap is not None and self.cap.isOpened()) else "OFF"
-        if self.is_camera_loading: status = "LOADING..."
-        
-        #if self.system_mode == "IDLE":
-        #   self.get_logger().info(f"💤 대기중 (Camera: {status})", throttle_duration_sec=5.0)
+    def image_callback(self, msg):
+        """ ROS Image 메시지를 OpenCV 포맷으로 변환해서 저장 """
+        try:
+            self.latest_frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+        except Exception as e:
+            self.get_logger().error(f"이미지 변환 실패: {e}")
 
     def mode_callback(self, msg):
         if self.system_mode != msg.data:
@@ -81,52 +84,10 @@ class DockingController(Node):
             
             if self.system_mode == "DOCKING":
                 self.is_docked = False
-                self.is_docking_process_started = False # 리셋
+                self.is_docking_process_started = False
+                self.latest_frame = None # 이전 잔상 제거
             else:
                 self.stop_robot()
-                self.manage_camera_resource()
-
-    def manage_camera_resource(self):
-        """ 안전하게 카메라 자원을 관리하는 함수 """
-        
-        # 1. 켜야 하는 상황
-        if self.system_mode == "DOCKING" and not self.is_docked:
-            if self.is_camera_loading: return
-            if self.cap is not None and self.cap.isOpened(): return
-
-            self.is_camera_loading = True
-            self.get_logger().info(f"📷 카메라({self.camera_port}번) 연결 시도...")
-            
-            try:
-                temp_cap = cv2.VideoCapture(self.camera_port)
-                # MJPG 설정
-                temp_cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
-                temp_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                temp_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                temp_cap.set(cv2.CAP_PROP_FPS, 30)
-
-                if temp_cap.isOpened():
-                    self.cap = temp_cap
-                    self.get_logger().info("✅ 카메라 연결 완료!")
-                else:
-                    self.get_logger().error("❌ 카메라 연결 실패")
-            except Exception as e:
-                self.get_logger().error(f"❌ 카메라 에러: {e}")
-            finally:
-                self.is_camera_loading = False
-
-        # 2. 꺼야 하는 상황
-        else:
-            if self.cap is not None:
-                self.get_logger().info("💤 카메라 자원 반환 (OFF)")
-                try:
-                    if self.cap.isOpened():
-                        self.cap.release()
-                except Exception as e:
-                    pass 
-                finally:
-                    self.cap = None
-                    self.is_camera_loading = False
 
     def send_init_gripper(self):
         if not self.is_init_sent:
@@ -139,9 +100,6 @@ class DockingController(Node):
         self.gripper_publisher.publish(msg)
 
     def execute_grip_sequence(self):
-        # [단일 스레드 특징]
-        # 여기서 time.sleep을 하면 로봇의 모든 기능(통신 포함)이 멈추고 이 동작만 수행합니다.
-        # 오히려 도킹 중에는 이게 더 안전합니다.
         self.get_logger().info("🚀 잡기 시퀀스 시작")
         self.publish_gripper("DOWN"); time.sleep(2.0) 
         self.publish_gripper("GRIP"); time.sleep(2.0)
@@ -149,21 +107,15 @@ class DockingController(Node):
         self.get_logger().info("✅ 잡기 완료")
 
     def timer_callback(self):
-        if self.is_docking_process_started:
-            return
-
-        self.manage_camera_resource()
-
+        # 도킹 중이 아니면 스킵
         if self.system_mode != "DOCKING": return
         if self.is_docked: return
-        if self.is_camera_loading: return
-        if self.cap is None or not self.cap.isOpened(): return
+        if self.is_docking_process_started: return
 
-        ret, frame = self.cap.read()
-        if not ret: 
-            self.get_logger().error("❌ 영상 끊김! 재연결 시도...", throttle_duration_sec=1.0)
-            if self.cap: self.cap.release()
-            self.cap = None
+        # ✅ [변경] 카메라 read() 대신 구독한 최신 프레임 사용
+        frame = self.latest_frame
+        if frame is None:
+            # video_stack.py가 아직 이미지를 안 보내주거나 로딩중인 상태
             return
 
         try:
@@ -200,7 +152,6 @@ class DockingController(Node):
 
         self.cmd_publisher.publish(cmd_msg)
 
-    # [2. perform_docking 함수 수정]
     def perform_docking(self, dist):
         self.stop_robot()
         self.get_logger().info(f"🎯 도착 완료! ({dist:.1f}cm)")
@@ -208,40 +159,31 @@ class DockingController(Node):
         self.execute_grip_sequence()
         
         self.is_docked = True
-        self.system_mode = "IDLE" 
         
-        self.manage_camera_resource()
-        self.stop_robot()
-        
-        # [핵심 추가] MQTT 노드에게 "나 다 끝났어, 그만 보채!" 라고 신호 보내기
+        # 완료 신호 전송 -> 이후 video_stack이 IDLE/DRIVING 모드로 바꾸면 카메라 복귀됨
         done_msg = String()
         done_msg.data = "DOCKING_COMPLETE"
         self.completion_pub.publish(done_msg)
-        self.get_logger().info("📢 [보고] 도킹 완료 신호 전송 -> MQTT 노드")
+        self.get_logger().info("📢 도킹 완료! (DOCKING_COMPLETE)")
         
         self.is_docking_process_started = False
+        # 모드를 IDLE로 변경하여 루프 종료
+        self.system_mode = "IDLE"
 
     def stop_robot(self):
         stop_msg = Twist()
         self.cmd_publisher.publish(stop_msg)
 
-    def __del__(self):
-        if self.cap is not None: 
-            self.cap.release()
-
 def main(args=None):
     rclpy.init(args=args)
     node = DockingController()
     
-    # [수정] 멀티스레드 Executor 제거하고 기본 spin 사용
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
         node.stop_robot()
-        if node.cap is not None:
-            node.cap.release()
         node.destroy_node()
         rclpy.shutdown()
 

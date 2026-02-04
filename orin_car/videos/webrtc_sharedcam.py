@@ -143,12 +143,12 @@ class CameraStreamTrack(VideoStreamTrack):
             frame = self.cam.get_latest_frame(copy=True)
 
         # 디버그: 송출 fps 찍기(너무 시끄러우면 주석)
-        self._fps_cnt += 1
-        now = asyncio.get_event_loop().time()
-        if now - self._fps_t0 > 1.0:
-            print(f"[WebRTC] sending fps ~ {self._fps_cnt}")
-            self._fps_cnt = 0
-            self._fps_t0 = now
+        #self._fps_cnt += 1
+        #now = asyncio.get_event_loop().time()
+        #if now - self._fps_t0 > 1.0:
+        #    print(f"[WebRTC] sending fps ~ {self._fps_cnt}")
+        #    self._fps_cnt = 0
+        #    self._fps_t0 = now
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         vf = VideoFrame.from_ndarray(rgb, format="rgb24")

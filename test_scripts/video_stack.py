@@ -1,18 +1,11 @@
 #!/usr/bin/env python3
-
-"""video_stack.py
-
-✅ 목표
-- 카메라를 딱 1번만 open (CameraManager)
-- ROS2 노드(마샬러)와 WebRTC 송출이 동일 카메라 프레임을 공유
-- /system_mode == "MARSHAL"일 때만 마샬러 추론 수행
-
-⚠️ 중요
-- 이 파일은 ROS2 패키지 orin_car의 "설치된" 실행파일로 동작하는 것을 전제로 한다.
+"""
+video_stack.py: 카메라 리소스 관리(Front/Rear), WebRTC 송출, 마샬러 AI, 도킹 영상 중계
 """
 
 import asyncio
 import threading
+import time
 
 import cv2
 import rclpy
@@ -23,170 +16,176 @@ from rclpy.qos import QoSProfile, QoSDurabilityPolicy
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
 
-# ✅ videos 폴더를 orin_car 패키지 내부로 흡수한 뒤의 정식 import
+# ✅ 패키지 모듈 import
 from orin_car.videos.camera_manager import CameraManager
 from orin_car.videos.webrtc_sharedcam import webrtc_main
 
-# ✅ MarshallerAI도 패키지 import가 정석 (소스에서 단독 실행하는 경우만 fallback)
 try:
     from orin_car.gesture_ai_test import MarshallerAI
-except Exception:  # pragma: no cover
-    # 개발 중 "python3 video_stack.py"로 돌릴 때를 위한 최소 fallback
-    from gesture_ai_test import MarshallerAI
+except Exception:
+    try:
+        from gesture_ai_test import MarshallerAI
+    except Exception:
+        MarshallerAI = None
+        print("⚠️ MarshallerAI module not found. AI features disabled.")
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy, ReliabilityPolicy
+
+class DualCameraSwitcher:
+    """WebRTC용 카메라 선택 스위처"""
+    def __init__(self, cam_front, cam_rear):
+        self.cam_front = cam_front
+        self.cam_rear = cam_rear
+        self.active_cam = cam_front
+        self.lock = threading.Lock()
+
+    def set_front(self):
+        with self.lock:
+            self.active_cam = self.cam_front
+
+    def set_rear(self):
+        with self.lock:
+            self.active_cam = self.cam_rear
+
+    def get_latest_frame(self, copy: bool = True):
+        with self.lock:
+            return self.active_cam.get_latest_frame(copy=copy)
+
 
 class MarshallerControllerSharedCam(Node):
-    """
-    기존 marshaller_controller_test.py의 구조를 최대한 유지하되,
-    VideoCapture를 열지 않고 CameraManager에서 프레임만 받는다.
-    """
-
-    def __init__(self, cam_manager: CameraManager):
+    def __init__(self, cam_front, cam_switcher):
         super().__init__("marshaller_controller_sharedcam")
 
-        self.get_logger().info("====================================")
-        self.get_logger().info("🚀 Marshaller + Shared Camera 시작 🚀")
-        self.get_logger().info("====================================")
+        self.cam_ai_source = cam_front  # 마샬러는 항상 전방
+        self.cam_switcher = cam_switcher # WebRTC용 스위처
 
-        self.mode_sub = self.create_subscription(String, "/system_mode", self.mode_callback, 10)
+        # ✅ [수정] 이미지를 보낼 때 "SensorDataQoS" (Best Effort) 적용
+        # 이렇게 하면 밀린 데이터는 버리고 최신 데이터 위주로 보냅니다.
+        qos_profile_sensor = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=QoSDurabilityPolicy.VOLATILE,
+            depth=1
+        )
+        self.rear_img_pub = self.create_publisher(Image, "/camera/rear/raw", qos_profile_sensor)
+        self.bridge = CvBridge()
 
-        # 👇 [수정] Publisher에 Transient Local QoS 적용
+        # 기존 설정
         qos_profile = QoSProfile(depth=10)
         qos_profile.durability = QoSDurabilityPolicy.TRANSIENT_LOCAL
+        self.mode_sub = self.create_subscription(String, "/system_mode", self.mode_callback, 10)
         self.mode_pub = self.create_publisher(String, "/system_mode", qos_profile)
-
         self.cmd_vel_pub = self.create_publisher(Twist, "/cmd_vel", 10)
         self.debug_pub = self.create_publisher(Image, "/marshaller/debug_image", 10)
 
         self.current_mode = "WAITING"
         self.drive_state = "STOP"
-        self.wait_tick = 0
-
-        self.bridge = CvBridge()
-        self.cam = cam_manager
-
         self.marshaller_ai = None
 
         self.timer = self.create_timer(0.1, self.control_loop)
-        self.get_logger().info("✅ MarshallerControllerSharedCam Initialized")
+        self.get_logger().info("✅ Video Stack & Camera Hub Started")
 
     def mode_callback(self, msg):
         prev = self.current_mode
         self.current_mode = msg.data
+
         if prev != self.current_mode:
-            self.get_logger().info(f"🔄 모드 변경: {prev} -> {self.current_mode}")
+            self.get_logger().info(f"🔄 Mode: {prev} -> {self.current_mode}")
+            
+            # 모드에 따라 WebRTC 송출 화면 변경
+            if self.current_mode == "DOCKING":
+                self.cam_switcher.set_rear()
+            else:
+                self.cam_switcher.set_front()
+            
             self.drive_state = "STOP"
 
     def control_loop(self):
+        # 1️⃣ [영상 중계] 도킹 모드라면 후방 카메라 이미지를 ROS 토픽으로 송신
+        if self.current_mode == "DOCKING":
+            frame_rear = self.cam_switcher.cam_rear.get_latest_frame(copy=True)
+            if frame_rear is not None:
+                img_msg = self.bridge.cv2_to_imgmsg(frame_rear, encoding="bgr8")
+                self.rear_img_pub.publish(img_msg)
+
+        # 2️⃣ 마샬러 모드가 아니면 AI 로직 종료
         if self.current_mode != "MARSHAL":
-            self.wait_tick += 1
             return
 
-        self.wait_tick = 0
+        # 3️⃣ 마샬러 로직 (전방 카메라 사용)
+        frame_front = self.cam_ai_source.get_latest_frame(copy=True)
+        if frame_front is None: return
 
-        frame = self.cam.get_latest_frame(copy=True)
-        if frame is None:
-            self.get_logger().warn("⚠️ No frame yet from CameraManager", throttle_duration_sec=2.0)
-            return
+        if self.marshaller_ai is None and MarshallerAI:
+            self.marshaller_ai = MarshallerAI()
 
-        # AI lazy init (기존 흐름 유지)
-        if self.marshaller_ai is None:
-            try:
-                self.marshaller_ai = MarshallerAI()
-                self.get_logger().info("🧠 MarshallerAI Loaded.")
-            except Exception as e:
-                self.get_logger().error(f"❌ AI Init Error: {e}")
+        if self.marshaller_ai:
+            action, out_frame = self.marshaller_ai.detect_gesture(frame_front)
+            
+            # 도킹 제스처 인식 시 모드 전환
+            if action == "DOCKING":
+                self.cmd_vel_pub.publish(Twist()) # 정지
+                self.mode_pub.publish(String(data="DOCKING")) 
                 return
 
-        action, out_frame = self.marshaller_ai.detect_gesture(frame)
+            # 주행 로직
+            valid = ["FORWARD", "BACKWARD", "LEFT", "RIGHT", "STOP"]
+            if action in valid and self.drive_state != action:
+                self.drive_state = action
+            
+            twist = Twist()
+            should_pub = True
+            if self.drive_state == "FORWARD": twist.linear.x = 0.35
+            elif self.drive_state == "BACKWARD": twist.linear.x = -0.35
+            elif self.drive_state == "LEFT": twist.angular.z = 0.5
+            elif self.drive_state == "RIGHT": twist.angular.z = -0.5
+            elif self.drive_state == "STOP": 
+                twist.linear.x = 0.0; twist.angular.z = 0.0
+            elif self.drive_state == "MANUAL_MODE": should_pub = False
+            
+            if should_pub:
+                self.cmd_vel_pub.publish(twist)
 
-        valid_commands = ["FORWARD", "BACKWARD", "LEFT", "RIGHT", "STOP", "MANUAL_MODE"]
-
-        if action == "DOCKING":
-            self.get_logger().info("🚀 [EVENT] 도킹 명령 수신! DOCKING 모드로 전환")
-
-            stop_msg = Twist()
-            self.cmd_vel_pub.publish(stop_msg)
-
-            mode_msg = String()
-            mode_msg.data = "DOCKING"
-            self.mode_pub.publish(mode_msg)
-            return
-
-        if action in valid_commands and self.drive_state != action:
-            self.get_logger().info(f"🔄 상태 변경: [{self.drive_state}] ➔ [{action}]")
-            self.drive_state = action
-
-        twist = Twist()
-        should_publish = True
-
-        if self.drive_state == "FORWARD":
-            twist.linear.x = 0.35
-        elif self.drive_state == "BACKWARD":
-            twist.linear.x = -0.35
-        elif self.drive_state == "LEFT":
-            twist.angular.z = 0.5
-        elif self.drive_state == "RIGHT":
-            twist.angular.z = -0.5
-        elif self.drive_state == "STOP":
-            twist.linear.x = 0.0
-            twist.angular.z = 0.0
-        elif self.drive_state == "MANUAL_MODE":
-            should_publish = False
-
-        if should_publish:
-            self.cmd_vel_pub.publish(twist)
-
-        # Debug image publish (기존 유지)
-        if self.debug_pub.get_subscription_count() > 0:
-            cv2.putText(
-                out_frame,
-                f"STATE: {self.drive_state}",
-                (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1,
-                (0, 255, 255),
-                2,
-            )
-            msg = self.bridge.cv2_to_imgmsg(out_frame, encoding="bgr8")
-            self.debug_pub.publish(msg)
+            # 디버그 이미지
+            if self.debug_pub.get_subscription_count() > 0:
+                cv2.putText(out_frame, f"CMD: {self.drive_state}", (10,30), 1, 2, (0,255,0), 2)
+                self.debug_pub.publish(self.bridge.cv2_to_imgmsg(out_frame, "bgr8"))
 
 
-def _run_webrtc_thread(cam: CameraManager):
-    """
-    WebRTC는 asyncio라서 별도 스레드에서 asyncio.run()으로 돌린다.
-    카메라는 절대 열지 않고 cam.get_latest_frame만 사용.
-    """
-    try:
-        asyncio.run(webrtc_main(cam))
-    except Exception as e:
-        print(f"[WebRTC Thread] exception: {e}")
+def _run_webrtc_thread(switcher):
+    try: asyncio.run(webrtc_main(switcher))
+    except Exception as e: print(f"WebRTC Error: {e}")
 
 
 def main(args=None):
-    # 1) CameraManager 시작 (카메라 open은 여기 딱 1번)
-    cam = CameraManager(device_index=0, width=640, height=480, fps=20)
-    if not cam.start():
-        print("❌ CameraManager failed to open camera.")
-        return
+    # ⚠️ [필수 확인] 카메라 포트 번호
+    IDX_FRONT = 0
+    IDX_REAR = 2 
 
-    # 2) WebRTC 백그라운드 스레드 시작
-    t_webrtc = threading.Thread(target=_run_webrtc_thread, args=(cam,), daemon=True)
+    print("📷 Opening Cameras...")
+    cam_front = CameraManager(IDX_FRONT, 640, 480, 20)
+    cam_rear = CameraManager(IDX_REAR, 640, 480, 20)
+    
+    if not cam_front.start():
+        print(f"❌ Front Cam({IDX_FRONT}) Failed!")
+        return
+    if not cam_rear.start(): 
+        print(f"⚠️ Rear Cam({IDX_REAR}) Failed! (WebRTC will use Front only)")
+
+    # WebRTC & ROS 실행
+    switcher = DualCameraSwitcher(cam_front, cam_rear)
+    t_webrtc = threading.Thread(target=_run_webrtc_thread, args=(switcher,), daemon=True)
     t_webrtc.start()
 
-    # 3) ROS2 노드(마샬러) 실행
     rclpy.init(args=args)
-    node = MarshallerControllerSharedCam(cam)
-
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
+    node = MarshallerControllerSharedCam(cam_front, switcher)
+    
+    try: rclpy.spin(node)
+    except KeyboardInterrupt: pass
     finally:
         node.destroy_node()
         rclpy.shutdown()
-        cam.stop()
+        cam_front.stop()
+        cam_rear.stop()
         print("✅ video_stack shutdown complete")
-
 
 if __name__ == "__main__":
     main()

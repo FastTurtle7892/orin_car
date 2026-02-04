@@ -13,11 +13,15 @@ find_package(rclpy REQUIRED)
 install(PROGRAMS
   test_scripts/mqtt_total_control_test.py
   test_scripts/docking_controller_test.py
+  test_scripts/docking_controller_test_v2.py
   test_scripts/marshaller_controller_test.py
   test_scripts/driving_controller_test.py
   test_scripts/ackermann_driver_test.py
   test_scripts/docking_ai_test.py
+  test_scripts/docking_ai_test_v2.py
   test_scripts/gesture_ai_test.py
+  sample_code/test_gripper.py
+  sample_code/motor_test.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+
+from rclpy.node import Node
 import time
 from adafruit_servokit import ServoKit
 import board
