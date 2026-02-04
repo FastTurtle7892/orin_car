@@ -33,6 +33,14 @@ class CameraManager:
         self._stop_evt.clear()
 
         self._cap = cv2.VideoCapture(self.device_index)
+        # gst_pipeline = (
+        #     "v4l2src device=/dev/video0 ! "
+        #     "image/jpeg, width=640, height=480, framerate=30/1 ! "
+        #     "jpegdec ! videoconvert ! video/x-raw, format=BGR ! "
+        #     "appsink drop=True"
+        # )
+        # self._cap = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
+        
         if not self._cap.isOpened():
             try:
                 self._cap.release()
@@ -44,6 +52,8 @@ class CameraManager:
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
         self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
         self._cap.set(cv2.CAP_PROP_FPS, self.fps)
+        
+        # self._cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
@@ -83,8 +93,8 @@ class CameraManager:
                 time.sleep(0.01)
 
             if self._sleep_s > 0:
-                time.sleep(self._sleep_s)
-
+                # time.sleep(self._sleep_s)
+                time.sleep(0.01)
     def get_latest_frame(self, copy: bool = True) -> Optional["cv2.Mat"]:
         with self._lock:
             if self._latest_frame is None:

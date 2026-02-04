@@ -19,6 +19,7 @@ import rclpy
 from cv_bridge import CvBridge
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
 
@@ -47,7 +48,12 @@ class MarshallerControllerSharedCam(Node):
         self.get_logger().info("====================================")
 
         self.mode_sub = self.create_subscription(String, "/system_mode", self.mode_callback, 10)
-        self.mode_pub = self.create_publisher(String, "/system_mode", 10)
+
+        # 👇 [수정] Publisher에 Transient Local QoS 적용
+        qos_profile = QoSProfile(depth=10)
+        qos_profile.durability = QoSDurabilityPolicy.TRANSIENT_LOCAL
+        self.mode_pub = self.create_publisher(String, "/system_mode", qos_profile)
+
         self.cmd_vel_pub = self.create_publisher(Twist, "/cmd_vel", 10)
         self.debug_pub = self.create_publisher(Image, "/marshaller/debug_image", 10)
 
