@@ -15,7 +15,7 @@ def generate_launch_description():
     # ================= [1. 파일 경로 설정] =================
     lidar_config = os.path.join(pkg_share, "config", "X4-Pro.yaml")
     nav2_params = os.path.join(pkg_share, "config", "nav2_params.yaml")
-    map_file = os.path.join(os.path.expanduser("~"), "maps2", "my_map.yaml")
+    map_file = os.path.join(os.path.expanduser("~"), "maps2", "my_map3.yaml")
     xacro_file = os.path.join(pkg_share, "urdf", "ackermann_car.urdf.xacro")
 
     # ================= [2. 로봇 모델(URDF) 처리] =================
@@ -71,20 +71,6 @@ def generate_launch_description():
         ],
     )
 
-    motor_driver = Node(
-        package=pkg_name,
-        executable="ackermann_driver_test.py",
-        name="ackermann_driver",
-        output="screen",
-    )
-
-    node_mqtt = Node(
-        package=pkg_name,
-        executable="mqtt_total_control_test.py",
-        name="mqtt_final",
-        output="screen",
-    )
-
     # ================= [4. 자율주행 스택 (Nav2)] =================
     nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -98,33 +84,12 @@ def generate_launch_description():
         }.items(),
     )
 
-    # ================= [5. 통합 테스트 컨트롤러] =================
-    docking_ctrl = Node(package=pkg_name, executable="docking_controller_test.py", output="screen")
-    driving_ctrl = Node(package=pkg_name, executable="driving_controller_test.py", output="screen")
-
-    # ✅ 영상/마샬러/WebRTC: "카메라 1회 open"을 보장하는 통합 노드
-    # - videos 폴더를 orin_car 패키지 안으로 옮긴 뒤, video_stack을 "설치된 executable"로 실행한다.
-    # - setup.py(console_scripts) 기준이면 executable='video_stack'
-    # - CMakeLists.txt(install PROGRAMS) 기준이면 executable='video_stack.py'
-    video_stack = Node(
-        package=pkg_name,
-        executable="video_stack",
-        name="video_stack",
-        output="screen",
-        emulate_tty=True,
-    )
-
     return LaunchDescription(
         [
             node_robot_state,
             node_joint_state,
-            motor_driver,
             node_ydlidar,
             node_rf2o,
-            nav2_launch,
-            node_mqtt,
-            docking_ctrl,
-            video_stack,  # ✅ marshaller_controller_test.py 대신 이거!
-            driving_ctrl,
+            nav2_launch
         ]
     )

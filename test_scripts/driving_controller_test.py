@@ -12,7 +12,7 @@ import math
 import os
 
 # [설정] 경로 파일 폴더
-PATH_FOLDER = os.path.expanduser("~/trailer_paths")
+PATH_FOLDER = os.path.expanduser("~/trailer_paths2")
 
 class DrivingController(Node):
     def __init__(self):
@@ -39,9 +39,9 @@ class DrivingController(Node):
         self._action_client = ActionClient(self, FollowPath, 'follow_path')
         
         # 3. 파라미터
-        self.declare_parameter('init_x', -1.22)
-        self.declare_parameter('init_y', -0.13)
-        self.declare_parameter('init_yaw', 0.0)
+        self.declare_parameter('init_x', -0.795)
+        self.declare_parameter('init_y', 2.995)
+        self.declare_parameter('init_yaw', -1.5708)
 
         self.current_mode = "IDLE"
         self.path_queue = []
