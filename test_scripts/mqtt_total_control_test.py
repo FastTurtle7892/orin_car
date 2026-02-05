@@ -3,7 +3,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from std_msgs.msg import String
-from geometry_msgs.msg import PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseWithCovarianceStamped, Twist # ✅ Twist 추가됨
 import json
 import paho.mqtt.client as mqtt
 import threading
@@ -43,7 +43,7 @@ class MqttTotalControl(Node):
         super().__init__('mqtt_total_control')
         
         self.get_logger().info("========================================")
-        self.get_logger().info("📢 [MQTT 통합 제어기] 모니터링 강화 버전 📢")
+        self.get_logger().info("📢 [MQTT 통합 제어기] 도킹 해제(RELEASE) 추가됨 📢")
         self.get_logger().info("========================================")
         
         # QoS 설정
@@ -56,7 +56,7 @@ class MqttTotalControl(Node):
         # ROS -> MQTT로 보낼 정보를 수집하기 위한 구독
         self.create_subscription(String, '/task_completion', self.completion_callback, 10)
         
-        # ✅ [추가] AMCL 위치 정보 구독 (실시간 좌표 추적)
+        # AMCL 위치 정보 구독
         self.create_subscription(
             PoseWithCovarianceStamped,
             'amcl_pose',
@@ -67,15 +67,19 @@ class MqttTotalControl(Node):
         # ROS Publisher
         self.mode_pub = self.create_publisher(String, '/system_mode', qos_profile)
         self.path_pub = self.create_publisher(String, '/driving/path_cmd', qos_profile)
+
+        # ✅ [추가] 직접 제어를 위한 퍼블리셔 (그리퍼 및 주행)
+        self.gripper_pub = self.create_publisher(String, '/gripper_cmd', 10)
+        self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         
         # 상태 변수
         self.current_mode = "IDLE"
-        self.current_pose = None  # (x, y, heading) 저장용
-        self.battery_level = 100  # 배터리는 현재 더미값 (추후 연동 가능)
+        self.current_pose = None  
+        self.battery_level = 100 
         
         # 타이머 설정
-        self.create_timer(0.5, self.publish_mode_periodic) # 내부용 (0.5초)
-        self.create_timer(1.0, self.publish_monitor_status) # 서버 전송용 (1.0초)
+        self.create_timer(0.5, self.publish_mode_periodic) 
+        self.create_timer(1.0, self.publish_monitor_status) 
 
         # MQTT 설정
         self.client = mqtt.Client(client_id=f"{CAR_ID}_bridge", protocol=mqtt.MQTTv311)
@@ -96,7 +100,6 @@ class MqttTotalControl(Node):
         except Exception as e:
             self.get_logger().error(f"❌ MQTT Connection Failed: {e}")
 
-    # ✅ [추가] 위치 정보 콜백 함수
     def pose_callback(self, msg):
         self.current_pose = msg.pose.pose
 
@@ -112,49 +115,72 @@ class MqttTotalControl(Node):
         self.get_logger().info(f"📡 Listening to {TOPIC_CMD}")
 
     def publish_mode_periodic(self):
-        """ROS 내부 노드들에게 현재 모드 알림"""
         msg = String()
         msg.data = self.current_mode
         self.mode_pub.publish(msg)
 
-    # ------------------------------------------------------------------
-    # ✅ [업그레이드] 서버로 상세 차량 상태 전송
-    # ------------------------------------------------------------------
     def publish_monitor_status(self):
         if not self.client.is_connected():
             return
 
-        # 좌표 및 방향 계산
         x, y, heading_deg = 0.0, 0.0, 0.0
         if self.current_pose:
             x = self.current_pose.position.x
             y = self.current_pose.position.y
-            
             qx = self.current_pose.orientation.x
             qy = self.current_pose.orientation.y
             qz = self.current_pose.orientation.z
             qw = self.current_pose.orientation.w
-            
             yaw_rad = euler_from_quaternion(qx, qy, qz, qw)
             heading_deg = math.degrees(yaw_rad)
 
-        # 서버 프로토콜에 맞춘 데이터 구성
         status_data = {
-            "carId": CAR_ID,              # 차량 ID
-            "status": self.current_mode,  # 현재 모드 (IDLE, DOCKING, DRIVING...)
-            "x": round(x, 2),             # X 좌표
-            "y": round(y, 2),             # Y 좌표
-            "heading": round(heading_deg, 2), # 방향 (각도)
-            "battery": self.battery_level,    # 배터리 잔량
-            "timestamp": int(time.time())     # 타임스탬프
+            "carId": CAR_ID,              
+            "status": self.current_mode,  
+            "x": round(x, 2),             
+            "y": round(y, 2),             
+            "heading": round(heading_deg, 2), 
+            "battery": self.battery_level,    
+            "timestamp": int(time.time())     
         }
 
         try:
             payload = json.dumps(status_data)
             self.client.publish(TOPIC_MONITOR, payload)
-            # self.get_logger().info(f"📤 Mon: {status_data}") # 필요시 주석 해제
         except Exception as e:
             self.get_logger().error(f"❌ Failed to publish monitor data: {e}")
+
+    # ✅ [추가] 도킹 해제 및 후진 시퀀스 함수
+    def execute_undocking_sequence(self):
+        self.get_logger().info("🚀 [도킹 해제] 시퀀스 시작")
+        
+        # 1. 그리퍼에게 'PLACE' 명령 전송 (Down -> Open -> Up)
+        grip_msg = String()
+        grip_msg.data = "PLACE"
+        self.gripper_pub.publish(grip_msg)
+        
+        self.get_logger().info("⏳ 물건 내려놓는 중 (5초 대기)...")
+        # 서보 움직임이 많으므로 넉넉히 대기
+        time.sleep(5.0)
+        
+        # 2. 후진하여 이탈하기
+        self.get_logger().info("🔙 후진 시작 (2초간)")
+        twist = Twist() 
+        twist.linear.x = -0.3  # 후진 속도 (조절 가능)
+        twist.angular.z = 0.0
+        
+        # 약 2초간 후진 명령 반복 전송
+        for _ in range(20): # 0.1s * 20 = 2.0s
+            self.cmd_vel_pub.publish(twist) 
+            time.sleep(0.1)
+            
+        # 3. 정지 및 모드 복귀
+        twist.linear.x = 0.0
+        self.cmd_vel_pub.publish(twist)
+        
+        self.current_mode = "IDLE"
+        self.get_logger().info("✅ 도킹 해제 완료 (IDLE 복귀)")
+        self.publish_monitor_status()
 
     def on_message(self, client, userdata, msg):
         try:
@@ -175,6 +201,13 @@ class MqttTotalControl(Node):
             elif cmd == "MARSHALLER_START":
                 self.current_mode = "MARSHAL"
                 self.get_logger().info("🔄 Mode Set -> MARSHAL")
+            
+            # ✅ [추가] 도킹 해제 명령 처리
+            elif cmd == "DOCKING_RELEASE":
+                self.get_logger().info("🔄 Mode Set -> UNDOCKING (Release)")
+                self.current_mode = "UNDOCKING"
+                # 긴 동작이므로 스레드로 실행 (Main Loop 차단 방지)
+                threading.Thread(target=self.execute_undocking_sequence).start()
 
             elif cmd == "START_PATH":
                 path_input = data.get("path") or data.get("path_file") or data.get("path_files")

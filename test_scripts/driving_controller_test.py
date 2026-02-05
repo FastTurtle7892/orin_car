@@ -12,7 +12,7 @@ import math
 import os
 
 # [설정] 경로 파일 폴더
-PATH_FOLDER = os.path.expanduser("~/trailer_paths")
+PATH_FOLDER = os.path.expanduser("~/trailer_paths2")
 
 class DrivingController(Node):
     def __init__(self):

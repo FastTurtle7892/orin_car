@@ -27,11 +27,11 @@ class AckermannDriver(Node):
         self.motor_channel = 0
         self.center_angle = 100.0
         
-        # [수정됨] test_gripper.py 기준 채널 설정
-        self.lift_channel = 1     # 팔
-        self.gripper_channel = 2  # 집게
+        # [설정] 채널 설정
+        self.lift_channel = 1     # 팔 (리프트)
+        self.gripper_channel = 2  # 집게 (그리퍼)
         
-        # [수정됨] test_gripper.py 기준 각도 설정
+        # [설정] 각도 설정
         # 초기 상태: Lift=160(위), Gripper=70(열림)
         # 잡기 상태: Lift=140(아래), Gripper=120(닫힘)
         self.LIFT_UP = 160.0      
@@ -51,7 +51,7 @@ class AckermannDriver(Node):
         self.create_subscription(Twist, 'cmd_vel', self.listener_callback, 10)
         self.create_subscription(String, '/gripper_cmd', self.gripper_callback, 10)
         
-        self.get_logger().info("✅ Ackermann Driver (Updated Angles) Started")
+        self.get_logger().info("✅ Ackermann Driver (Updated Angles + PLACE cmd) Started")
 
         if HARDWARE_AVAILABLE:
             self.hw_thread = threading.Thread(target=self.connect_hardware)
@@ -83,7 +83,7 @@ class AckermannDriver(Node):
     def move_servo_smooth(self, channel, start_angle, end_angle, step_delay=0.03):
         """
         step_delay: 0.01(빠름) ~ 0.05(느림). 
-        test_gripper.py 처럼 천천히 움직이도록 0.03으로 설정했습니다.
+        부드러운 움직임을 위해 delay를 줍니다.
         """
         if not self.hardware_connected: return
         if abs(start_angle - end_angle) < 1.0: return
@@ -126,10 +126,10 @@ class AckermannDriver(Node):
             self.move_servo_smooth(self.gripper_channel, self.current_grip, self.GRIP_CLOSE)
             self.current_grip = self.GRIP_CLOSE
             
-        elif cmd == "RELEASE" or cmd == "OPEN": # 놓기 (OPEN)
+        elif cmd == "RELEASE" or cmd == "OPEN": # 놓기 (OPEN) - 제자리에서 벌리기만 함
             self.move_servo_smooth(self.gripper_channel, self.current_grip, self.GRIP_OPEN)
             self.current_grip = self.GRIP_OPEN
-            
+        
         elif cmd == "INIT":
             # UP -> OPEN
             self.move_servo_smooth(self.lift_channel, self.current_lift, self.LIFT_UP)
@@ -137,6 +137,26 @@ class AckermannDriver(Node):
             time.sleep(0.5)
             self.move_servo_smooth(self.gripper_channel, self.current_grip, self.GRIP_OPEN)
             self.current_grip = self.GRIP_OPEN
+            
+        # ✅ [추가됨] 물건을 내려놓고 빠져나오기 위한 복합 동작
+        elif cmd == "PLACE":
+            self.get_logger().info("📦 물건 놓기 시퀀스 시작 (Down -> Open -> Up)")
+            
+            # 1. 리프트 내리기 (DOWN)
+            self.move_servo_smooth(self.lift_channel, self.current_lift, self.LIFT_DOWN)
+            self.current_lift = self.LIFT_DOWN
+            time.sleep(1.0) # 안정화 대기
+            
+            # 2. 그리퍼 풀기 (OPEN)
+            self.move_servo_smooth(self.gripper_channel, self.current_grip, self.GRIP_OPEN)
+            self.current_grip = self.GRIP_OPEN
+            time.sleep(1.0)
+            
+            # 3. 리프트 올리기 (UP) - 들어올리면서 빠져나갈 준비
+            self.move_servo_smooth(self.lift_channel, self.current_lift, self.LIFT_UP)
+            self.current_lift = self.LIFT_UP
+            
+            self.get_logger().info("✅ 물건 놓기 동작(PLACE) 완료")
 
     def listener_callback(self, msg):
         if not self.hardware_connected: return
