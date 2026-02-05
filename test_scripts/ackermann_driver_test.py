@@ -21,7 +21,7 @@ class AckermannDriver(Node):
         super().__init__('ackermann_driver')
 
         self.wheelbase = 0.145        
-        self.max_steering_deg = 40.0 
+        self.max_steering_deg = 50.0 
         
         self.servo_channel = 0
         self.motor_channel = 0
@@ -164,7 +164,7 @@ class AckermannDriver(Node):
 
     def set_throttle_hardware(self, throttle):
         if not self.pca: return
-        throttle = max(-0.8, min(0.8, throttle))
+        throttle = max(-0.55, min(0.55, throttle))
         pulse = int(0xFFFF * abs(throttle))
         in1, in2, in3 = self.motor_channel + 5, self.motor_channel + 4, self.motor_channel + 3
 

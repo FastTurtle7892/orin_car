@@ -39,9 +39,9 @@ class DrivingController(Node):
         self._action_client = ActionClient(self, FollowPath, 'follow_path')
         
         # 3. 파라미터
-        self.declare_parameter('init_x', -0.795)
-        self.declare_parameter('init_y', 2.995)
-        self.declare_parameter('init_yaw', -1.5708)
+        self.declare_parameter('init_x',-0.8893)
+        self.declare_parameter('init_y',  2.5)
+        self.declare_parameter('init_yaw', -1.57)
 
         self.current_mode = "IDLE"
         self.path_queue = []

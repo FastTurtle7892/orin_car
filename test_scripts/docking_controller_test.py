@@ -65,7 +65,7 @@ class DockingController(Node):
 
         self.TARGET_DIST = 16.5
         self.STOP_TOLERANCE = 1.0 
-        self.FIXED_SPEED = -0.25 
+        self.FIXED_SPEED = -0.25
         
         self.system_mode = "IDLE"
         self.is_docked = False

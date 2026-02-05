@@ -14,7 +14,7 @@ def generate_launch_description():
 
     # ================= [1. 파일 경로 설정] =================
     lidar_config = os.path.join(pkg_share, "config", "X4-Pro.yaml")
-    nav2_params = os.path.join(pkg_share, "config", "nav2_params.yaml")
+    nav2_params = os.path.join(pkg_share, "config", "nav2_params2.yaml")
     map_file = os.path.join(os.path.expanduser("~"), "maps2", "my_map.yaml")
     xacro_file = os.path.join(pkg_share, "urdf", "ackermann_car.urdf.xacro")
 
