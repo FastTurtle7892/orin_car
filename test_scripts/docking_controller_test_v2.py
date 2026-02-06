@@ -53,7 +53,7 @@ class DockingControllerV2(Node):
         # ==========================================
         # [핵심 튜닝 파라미터] - 여기서 조절하세요
         # ==========================================
-        self.TARGET_DIST = 17.0       # 목표 정지 거리 (cm)
+        self.TARGET_DIST = 16.0       # 목표 정지 거리 (cm)
         self.STOP_TOLERANCE = 1.0     # 정지 오차 범위 (cm)
         self.FIXED_SPEED = -0.25      # 후진 속도 (음수)
         

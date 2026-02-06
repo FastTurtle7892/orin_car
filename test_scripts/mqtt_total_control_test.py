@@ -26,11 +26,10 @@ TOPIC_ACK        = "autowing_car/v1/ack"
 
 MAP_DATA_PATH = os.path.expanduser("~/map_data.json")
 
-# ✅ [수정] 출발지(Home) 좌표 설정 (사용자 요청)
+# ✅ [수정] 출발지(Home) 좌표 설정
 HOME_X = -0.8893
 HOME_Y = 2.5
-# Y값이 2.3 정도 되면 도착으로 간주 (2.5 - 0.2 = 2.3)
-# X좌표 오차까지 고려하여 반경 0.5m 이내면 도착 처리
+# 반경 0.5m 이내면 도착 처리 (Y=2.3 통과 시점 포함)
 HOME_THRESHOLD = 0.5  
 
 def euler_from_quaternion(x, y, z, w):
@@ -51,7 +50,7 @@ class MqttTotalControl(Node):
         super().__init__('mqtt_total_control')
         
         self.get_logger().info("============================================")
-        self.get_logger().info(f"📢 [MQTT] v1.4 Home Check Logic Update ({CAR_CODE})")
+        self.get_logger().info(f"📢 [MQTT] v1.5 Double-Action Fix ({CAR_CODE})")
         self.get_logger().info("============================================")
         
         self.map_data = {}
@@ -73,6 +72,9 @@ class MqttTotalControl(Node):
         # 내부 상태 변수
         self.current_mode = "IDLE"  # 로봇 내부 제어 모드
         self.monitor_mode = "IDLE"  # 서버 모니터링용 상태
+        
+        # ✅ [핵심 수정] 중복 발행 방지를 위한 변수 추가
+        self.last_published_mode = None 
         
         self.current_pose = None
         self.battery_level = 85
@@ -132,18 +134,21 @@ class MqttTotalControl(Node):
         data = msg.data
         self.get_logger().info(f"✅ Task Completed: {data}")
         
+        # 1. 도킹 완료
         if data == "DOCKING_COMPLETE":
             self.current_mode = "IDLE"
             self.monitor_mode = "TOWING"
             self.send_ack("CONNECT", "SUCCESS")
             self.publish_monitor_status()
 
+        # 2. 그리퍼 해제 완료 -> WAITING_FOR_RETURN 상태로 대기
         elif data == "RELEASE_COMPLETE":
             self.current_mode = "IDLE"
-            self.monitor_mode = "WAITING_FOR_RETURN"
+            self.monitor_mode = "WAITING_FOR_RETURN"  
             self.send_ack("DISCONNECT", "SUCCESS")
             self.publish_monitor_status()
 
+        # 3. 주행 완료
         elif data == "DRIVING_COMPLETE":
             self.get_logger().info(f"🏁 Driving Finished. Final Action: {self.pending_final_action}")
             
@@ -154,6 +159,17 @@ class MqttTotalControl(Node):
             elif self.pending_final_action == "UNDOCK" or self.pending_final_action == "DISCONNECT":
                 self.current_mode = "RELEASE"
                 self.monitor_mode = "UNDOCKING"
+            
+            # [복귀 시나리오] PARK 명령으로 주행이 끝났을 때
+            elif self.pending_final_action == "PARK":
+                self.current_mode = "PARK" 
+                self.monitor_mode = "RETURNING"
+
+            # [마샬러 시나리오] Node 7/8 도착 시 마샬러 모드 실행
+            elif self.pending_final_action == "MARSHAL":
+                self.get_logger().info("👮 도착 완료. 마샬러(수신호 인식) 모드로 전환합니다.")
+                self.current_mode = "MARSHAL"
+                self.monitor_mode = "MARSHALING"
                 
             else:
                 self.current_mode = "IDLE"
@@ -163,9 +179,14 @@ class MqttTotalControl(Node):
             self.latest_drive_path = []
 
     def publish_mode_periodic(self):
-        msg = String()
-        msg.data = self.current_mode
-        self.mode_pub.publish(msg)
+        # ✅ [핵심 수정] 모드가 실제로 변경되었을 때만 토픽을 발행합니다.
+        # 이렇게 하면 큐에 'RELEASE' 메시지가 쌓여서 두 번 실행되는 것을 방지합니다.
+        if self.current_mode != self.last_published_mode:
+            self.get_logger().info(f"📢 System Mode Changed: {self.last_published_mode} -> {self.current_mode}")
+            msg = String()
+            msg.data = self.current_mode
+            self.mode_pub.publish(msg)
+            self.last_published_mode = self.current_mode
 
     def publish_monitor_status(self):
         if not self.client.is_connected(): return
@@ -179,15 +200,10 @@ class MqttTotalControl(Node):
                 self.current_pose.orientation.z, self.current_pose.orientation.w
             )
 
-        # ✅ [수정] 복귀 중(RETURNING)일 때 집 도착 감지 로직
-        # "Y값이 2.3이 되면(2.5에 근접하면)" 조건 적용
+        # ✅ [집 도착 감지] 
+        # RETURNING 상태일 때 집 좌표(HOME_X, HOME_Y) 반경 안에 들면 IDLE로 전환
         if self.monitor_mode == "RETURNING":
-            # 1. Y축 기준 검사: 목표(2.5)에 대해 2.3 이상 올라오면 도착으로 간주 (y > 2.3)
-            #    혹은 단순 거리 계산 (안전하게 반경 0.5m)
             dist_to_home = math.sqrt((x - HOME_X)**2 + (y - HOME_Y)**2)
-            
-            # (옵션) 사용자 요청대로 Y축 값만 명시적으로 볼 수도 있음
-            # if y >= 2.3: ...
             
             if dist_to_home < HOME_THRESHOLD:
                 self.monitor_mode = "IDLE"
@@ -239,7 +255,7 @@ class MqttTotalControl(Node):
                             "drive_path": self.latest_drive_path
                         }
                         
-                        # 정지 명령 (빈 경로)
+                        # 정지 명령
                         self.path_pub.publish(String(data="[]"))
                         
                         self.current_mode = "IDLE"
@@ -287,12 +303,20 @@ class MqttTotalControl(Node):
                         self.current_mode = "DRIVING"
                         self.latest_drive_path = full_path
                         
+                        # [상태 전이 로직]
                         if final_action in ["DOCK", "CONNECT"]:
                             self.monitor_mode = "MOVING_TO_GATE"
                         elif final_action in ["UNDOCK", "DISCONNECT"]:
                             self.monitor_mode = "TOWING"
+                        
+                        # [요청사항] PARK 명령이 들어오면 RETURNING으로 변경
                         elif final_action in ["PARK"]:
                             self.monitor_mode = "RETURNING"
+                        
+                        # [마샬러]
+                        elif final_action == "MARSHAL":
+                            self.monitor_mode = "MOVING_TO_GATE"
+
                         else:
                             self.monitor_mode = "MOVING_TO_GATE"
 

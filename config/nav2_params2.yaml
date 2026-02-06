@@ -7,22 +7,26 @@ amcl:
     initial_cov_yy: 0.02
     initial_cov_aa: 0.02
 
-    # [수정됨] 라이다/위치 떨림 방지 (너무 민감하지 않게 값 증가)
-    # 기존 0.01(1cm)은 너무 민감하여 지도상에서 로봇이 계속 떨립니다.
-    update_min_d: 0.1   # 10cm 이동 시 갱신
-    update_min_a: 0.1   # 약 5.7도 회전 시 갱신
+    # [핵심 수정] 맵 틀어짐 방지 (Drift Fix)
+    # 너무 띄엄띄엄(10cm) 검사하면 그 사이 발생한 회전 오차를 못 잡습니다.
+    # 다시 조금 더 민감하게 조이되, 아래 alpha 값으로 보완합니다.
+    update_min_d: 0.05   # 0.1 -> 0.05 (5cm마다 갱신)
+    update_min_a: 0.05   # 0.1 -> 0.05 (약 2.8도마다 갱신)
 
-    # 오도메트리 노이즈 설정
-    alpha1: 0.2  # 노이즈 값을 조금 줄여서 오도메트리를 더 신뢰하도록 변경 (떨림 감소 효과)
-    alpha2: 0.2
-    alpha3: 0.2
-    alpha4: 0.2
+    # [핵심 수정] 오도메트리 노이즈 모델 (아커만 방식 미끄러짐 보정)
+    # 값이 클수록 "바퀴 값을 덜 믿고, 라이다 매칭 범위를 넓게 탐색"합니다.
+    # 맵이 회전하며 틀어지는 경우 alpha1, alpha2를 높여야 합니다.
+    alpha1: 0.3  # 회전 시 회전 노이즈 (0.2 -> 0.3)
+    alpha2: 0.3  # 직진 시 회전 노이즈 (0.2 -> 0.3) - 맵이 서서히 기우는 현상 방지
+    alpha3: 0.2  # 직진 시 이동 노이즈
+    alpha4: 0.2  # 회전 시 이동 노이즈
     alpha5: 0.2
 
-    # 입자 필터 설정
-    min_particles: 500
-    max_particles: 2000
-    resample_interval: 2  # 리샘플링 간격을 늘려 연산 부하 및 떨림 감소
+    # [핵심 수정] 입자 필터 밀도 증가
+    # 입자가 많아야 틀어진 위치를 빨리 찾습니다.
+    min_particles: 1000   # 500 -> 1000 (최소 입자 수 증가)
+    max_particles: 3000   # 2000 -> 3000
+    resample_interval: 1  # 2 -> 1 (매번 리샘플링하여 즉각 반영)
 
     base_frame_id: "base_link"
     global_frame_id: "map"
@@ -30,13 +34,14 @@ amcl:
     scan_topic: scan
     
     tf_broadcast: true
-    transform_tolerance: 1.0
+    transform_tolerance: 1.0 # TF 지연 허용 시간
     
     # Lidar 모델 튜닝
-    laser_max_beams: 100
+    # z_hit가 너무 높으면 완벽하게 일치하지 않을 때 위치를 놓칩니다.
+    laser_max_beams: 100 # 빔 개수를 60~100 정도로 유지 (너무 적으면 정확도 하락)
     laser_model_type: "likelihood_field"
-    z_hit: 0.9
-    z_rand: 0.05
+    z_hit: 0.8          # 0.9 -> 0.8 (약간의 환경 변화/오차 허용)
+    z_rand: 0.2         # 0.05 -> 0.2 (랜덤 노이즈 허용치 증가)
     z_max: 0.05
     z_short: 0.05
     sigma_hit: 0.2
