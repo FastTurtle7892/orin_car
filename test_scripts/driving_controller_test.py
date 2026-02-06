@@ -11,7 +11,7 @@ import json
 import math
 import os
 
-# [설정] 경로 파일 폴더 (파일명을 쓸 때만 사용됨)
+# [설정] 경로 파일 폴더
 PATH_FOLDER = os.path.expanduser("~/trailer_paths2")
 
 class DrivingController(Node):
@@ -19,7 +19,7 @@ class DrivingController(Node):
         super().__init__('driving_controller')
         
         self.get_logger().info("====================================")
-        self.get_logger().info("🚗 [주행 컨트롤러] 좌표 수신 모드 지원 🚗") 
+        self.get_logger().info("🚗 [주행 컨트롤러] 고정 초기 위치 모드 🚗") 
         self.get_logger().info("====================================")
 
         qos_profile = QoSProfile(
@@ -31,23 +31,27 @@ class DrivingController(Node):
         self.create_subscription(String, '/system_mode', self.mode_callback, qos_profile)
         self.create_subscription(String, '/driving/path_cmd', self.path_callback, qos_profile)
         
+        # ✅ [복구] 고정 초기 위치 발행기 활성화
         self.initial_pose_pub = self.create_publisher(PoseWithCovarianceStamped, 'initialpose', 10)
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self._action_client = ActionClient(self, FollowPath, 'follow_path')
-        self.completion_pub = self.create_publisher(String, '/task_completion', 10) # 완료 신호용
+        self.completion_pub = self.create_publisher(String, '/task_completion', 10)
         
+        # ✅ [설정] 출발지 좌표 (사용자 환경에 맞게 확인 필요)
+        # 만약 180도 돌아가 있다면 init_yaw를 수정해야 합니다. (예: -1.57 -> 1.57)
         self.declare_parameter('init_x', -0.8893)
-        self.declare_parameter('init_y',  2.5)
-        self.declare_parameter('init_yaw', -1.57)
+        self.declare_parameter('init_y',  2.3)
+        self.declare_parameter('init_yaw', -1.57) # -90도 (남쪽)
 
         self.current_mode = "IDLE"
         self.path_queue = []
         self.current_goal_handle = None
 
-        self.get_logger().info("⏳ Driving Controller Ready. (Auto Init Pose in 10s)")
-        self.timer_init = self.create_timer(10.0, self.set_initial_pose_once)
+        self.get_logger().info("⏳ Ready. (Setting Initial Pose in 5s...)")
+        self.timer_init = self.create_timer(5.0, self.set_initial_pose_once)
 
     def set_initial_pose_once(self):
+        """ 로봇에게 '너는 여기에 있어'라고 강제로 알려줌 """
         self.timer_init.cancel()
         x = self.get_parameter('init_x').value
         y = self.get_parameter('init_y').value
@@ -61,8 +65,14 @@ class DrivingController(Node):
         pose_msg.pose.pose.orientation.z = math.sin(yaw / 2.0)
         pose_msg.pose.pose.orientation.w = math.cos(yaw / 2.0)
         
+        # 초기 분산(Covariance) 설정: 작을수록 "이 위치가 확실해!"라는 뜻
+        # 아까 AMCL 파라미터에서 initial_cov를 키웠으므로, 여기서도 약간 여유를 줍니다.
+        pose_msg.pose.covariance[0] = 0.25  # X 분산
+        pose_msg.pose.covariance[7] = 0.25  # Y 분산
+        pose_msg.pose.covariance[35] = 0.06 # Yaw 분산 (약간의 회전 오차 허용)
+
         self.initial_pose_pub.publish(pose_msg)
-        self.get_logger().info(f"📍 Initial Pose Set: ({x}, {y})")
+        self.get_logger().info(f"📍 Initial Pose Set: ({x}, {y}, yaw={yaw})")
 
     def mode_callback(self, msg):
         previous_mode = self.current_mode
@@ -74,7 +84,6 @@ class DrivingController(Node):
             self.cancel_nav2()
 
     def path_callback(self, msg):
-        """ MQTT 노드로부터 경로 토픽을 받았을 때 실행됨 """
         if self.current_mode != "DRIVING":
             self.get_logger().warn("⚠️ 경로 수신됨 (Auto Switch to DRIVING)")
             self.current_mode = "DRIVING"
@@ -82,22 +91,19 @@ class DrivingController(Node):
         try:
             path_input = json.loads(msg.data)
             
-            # [수정된 부분] 수신된 데이터가 좌표 리스트인지 파일명인지 확인
-            
-            # CASE 1: 좌표 리스트가 직접 온 경우 [[x,y,yaw], [x,y,yaw], ...]
+            # CASE 1: Raw Coordinates
             if isinstance(path_input, list) and len(path_input) > 0 and isinstance(path_input[0], list):
                 self.get_logger().info(f"📥 Raw Coordinates Received ({len(path_input)} points)")
                 self.execute_raw_path(path_input)
                 return
 
-            # CASE 2: 파일명 리스트가 온 경우 ["P1.json", "P2.json"] (기존 방식 호환)
+            # CASE 2: File Names
             self.get_logger().info(f"📥 File Paths Received: {path_input}")
             self.path_queue = []
             if isinstance(path_input, list):
                 self.path_queue.extend(path_input)
             else:
                 self.path_queue.append(path_input)
-                
             self.process_next_queue_file()
             
         except Exception as e:
@@ -112,17 +118,13 @@ class DrivingController(Node):
         filename = self.path_queue.pop(0)
         self.execute_json_file(filename)
 
-    # -------------------------------------------------------------------
-    # [신규] 좌표 리스트를 바로 Nav2 경로로 변환하여 실행
-    # -------------------------------------------------------------------
     def execute_raw_path(self, points):
         ros_path = Path()
         ros_path.header.frame_id = "map"
         ros_path.header.stamp = self.get_clock().now().to_msg()
 
         for p in points:
-            if len(p) < 3: continue # [x, y, yaw] 형식이 아니면 스킵
-            
+            if len(p) < 3: continue 
             pose = PoseStamped()
             pose.header = ros_path.header
             pose.pose.position.x = float(p[0])
@@ -135,9 +137,6 @@ class DrivingController(Node):
         self.get_logger().info(f"🚀 Sending Raw Path Goal (Points: {len(ros_path.poses)})")
         self.send_nav2_goal(ros_path)
 
-    # -------------------------------------------------------------------
-    # [기존] 파일을 읽어서 실행하는 함수
-    # -------------------------------------------------------------------
     def execute_json_file(self, filename):
         full_path = os.path.join(PATH_FOLDER, filename)
         if not os.path.exists(full_path):
@@ -169,9 +168,6 @@ class DrivingController(Node):
         self.get_logger().info(f"🚀 Sending File Path Goal: {filename}")
         self.send_nav2_goal(ros_path)
 
-    # -------------------------------------------------------------------
-    # [공통] Nav2로 Goal 전송
-    # -------------------------------------------------------------------
     def send_nav2_goal(self, ros_path):
         goal_msg = FollowPath.Goal()
         goal_msg.path = ros_path
@@ -179,7 +175,6 @@ class DrivingController(Node):
         goal_msg.goal_checker_id = "general_goal_checker"
 
         self._action_client.wait_for_server()
-        
         future = self._action_client.send_goal_async(goal_msg)
         future.add_done_callback(self.goal_response_callback)
 
@@ -197,12 +192,13 @@ class DrivingController(Node):
         result = future.result()
         if result.status == 4: # SUCCEEDED
             self.get_logger().info("🏁 Path Segment Finished.")
-            
-            # 큐에 남은 파일이 있다면 계속 진행 (파일 모드일 때)
             if self.path_queue:
                 self.process_next_queue_file()
             else:
                 self.publish_completion()
+        elif result.status == 6: # ABORTED
+            self.get_logger().warn("⚠️ Path Aborted (Status 6). Not sending COMPLETION signal.")
+            self.current_goal_handle = None
         else:
             self.get_logger().warn(f"⚠️ Path Ended with status: {result.status}")
             self.current_goal_handle = None
