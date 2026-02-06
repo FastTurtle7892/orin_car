@@ -151,7 +151,7 @@ class MqttTotalControl(Node):
                 
             elif self.pending_final_action == "UNDOCK" or self.pending_final_action == "DISCONNECT":
                 self.current_mode = "RELEASE"
-                self.monitor_mode = "UNLOADING"
+                self.monitor_mode = "UNDOCKING"
                 
             else:
                 self.current_mode = "IDLE"
