@@ -16,19 +16,22 @@ from datetime import datetime
 # ================= [설정] =================
 MQTT_BROKER = "autowingcar.o-r.kr" 
 MQTT_PORT = 8883
-CAR_CODE = "TC01"  # 가이드의 car_code (기존 carId)
+CAR_CODE = "TC01"  # 가이드의 car_code
 
 # [가이드 v1.1] 토픽 설정
-# 1. 수신 토픽 (Server -> Edge)
 TOPIC_CMD_CONTROL = f"autowing_car/v1/{CAR_CODE}/cmd/control"
 TOPIC_CMD_DRIVE   = f"autowing_car/v1/{CAR_CODE}/cmd/drive"
-
-# 2. 송신 토픽 (Edge -> Server)
 TOPIC_MONITORING = "autowing_car/v1/monitoring"
 TOPIC_ACK        = "autowing_car/v1/ack"
 
-# 3. 맵 데이터 경로
 MAP_DATA_PATH = os.path.expanduser("~/map_data.json")
+
+# ✅ [수정] 출발지(Home) 좌표 설정 (사용자 요청)
+HOME_X = -0.8893
+HOME_Y = 2.5
+# Y값이 2.3 정도 되면 도착으로 간주 (2.5 - 0.2 = 2.3)
+# X좌표 오차까지 고려하여 반경 0.5m 이내면 도착 처리
+HOME_THRESHOLD = 0.5  
 
 def euler_from_quaternion(x, y, z, w):
     t0 = +2.0 * (w * x + y * z)
@@ -48,7 +51,7 @@ class MqttTotalControl(Node):
         super().__init__('mqtt_total_control')
         
         self.get_logger().info("============================================")
-        self.get_logger().info(f"📢 [MQTT] v1.1 Protocol Applied ({CAR_CODE})")
+        self.get_logger().info(f"📢 [MQTT] v1.4 Home Check Logic Update ({CAR_CODE})")
         self.get_logger().info("============================================")
         
         self.map_data = {}
@@ -68,18 +71,21 @@ class MqttTotalControl(Node):
         self.path_pub = self.create_publisher(String, '/driving/path_cmd', qos_profile)
         
         # 내부 상태 변수
-        self.current_mode = "IDLE"  # 내부 로직용 모드
-        self.monitor_mode = "IDLE"  # 서버 전송용 모드 (가이드 준수)
+        self.current_mode = "IDLE"  # 로봇 내부 제어 모드
+        self.monitor_mode = "IDLE"  # 서버 모니터링용 상태
         
         self.current_pose = None
         self.battery_level = 85
         self.current_velocity = 0.0
         
         self.pending_final_action = "NONE"
-        self.driving_purpose = "MOVING_TO_IDLE" # 주행 목적 (모니터링 상태 표시용)
+        
+        # 작업 저장 컨텍스트 (비상 정지/재개용)
+        self.paused_context = None 
+        self.latest_drive_path = []
 
         self.create_timer(0.5, self.publish_mode_periodic)
-        self.create_timer(1.0, self.publish_monitor_status)
+        self.create_timer(1.0, self.publish_monitor_status) 
 
         # MQTT Client 설정
         self.client = mqtt.Client(client_id=f"{CAR_CODE}_edge", protocol=mqtt.MQTTv311)
@@ -111,32 +117,29 @@ class MqttTotalControl(Node):
             self.get_logger().warn(f"⚠️ Map file missing: {MAP_DATA_PATH}")
 
     def on_connect(self, client, userdata, flags, rc):
-        # [가이드 v1.1] Control과 Drive 토픽 구독
         client.subscribe(TOPIC_CMD_CONTROL)
         client.subscribe(TOPIC_CMD_DRIVE)
         self.get_logger().info(f"📡 Subscribed: {TOPIC_CMD_CONTROL}, {TOPIC_CMD_DRIVE}")
-        
-        # 연결 성공 ACK 전송
         self.send_ack("CONNECT", "SUCCESS")
 
     def pose_callback(self, msg):
         self.current_pose = msg.pose.pose
-        # 속도는 추정치나 별도 오도메트리 토픽에서 가져올 수 있음 (현재는 더미)
         self.current_velocity = 0.0 
 
     def completion_callback(self, msg):
+        if self.monitor_mode == "STOP": return
+
         data = msg.data
         self.get_logger().info(f"✅ Task Completed: {data}")
         
         if data == "DOCKING_COMPLETE":
-            # 내부: IDLE, 외부: TOWING(연결된 상태)
             self.current_mode = "IDLE"
-            self.monitor_mode = "TOWING" 
-            self.send_ack("CONNECT", "SUCCESS") # 도킹 완료 = CONNECT 성공 간주
+            self.monitor_mode = "TOWING"
+            self.send_ack("CONNECT", "SUCCESS")
 
         elif data == "RELEASE_COMPLETE":
             self.current_mode = "IDLE"
-            self.monitor_mode = "IDLE"
+            self.monitor_mode = "WAITING_FOR_RETURN"
             self.send_ack("DISCONNECT", "SUCCESS")
 
         elif data == "DRIVING_COMPLETE":
@@ -144,27 +147,24 @@ class MqttTotalControl(Node):
             
             if self.pending_final_action == "DOCK" or self.pending_final_action == "CONNECT":
                 self.current_mode = "DOCKING"
-                self.monitor_mode = "LOADING" # 가이드: Connecting to aircraft
+                self.monitor_mode = "DOCKING"
                 
             elif self.pending_final_action == "UNDOCK" or self.pending_final_action == "DISCONNECT":
                 self.current_mode = "RELEASE"
-                self.monitor_mode = "UNLOADING" # 가이드: Disconnecting
+                self.monitor_mode = "UNLOADING"
                 
             else:
                 self.current_mode = "IDLE"
                 self.monitor_mode = "IDLE"
             
             self.pending_final_action = "NONE"
+            self.latest_drive_path = []
 
     def publish_mode_periodic(self):
-        # ROS 시스템 내부 모드 전파
         msg = String()
         msg.data = self.current_mode
         self.mode_pub.publish(msg)
 
-    # ----------------------------------------------------
-    # [가이드 v1.1] Telemetry Monitoring 구현
-    # ----------------------------------------------------
     def publish_monitor_status(self):
         if not self.client.is_connected(): return
 
@@ -177,11 +177,20 @@ class MqttTotalControl(Node):
                 self.current_pose.orientation.z, self.current_pose.orientation.w
             )
 
-        # 현재 상태 결정 (가이드 테이블 준수)
-        # 내부 모드(DRIVING)일 경우, 목적에 따라 상태 세분화
-        status_code = self.monitor_mode
-        if self.current_mode == "DRIVING":
-            status_code = self.driving_purpose  # MOVING_TO_LOAD or MOVING_TO_IDLE
+        # ✅ [수정] 복귀 중(RETURNING)일 때 집 도착 감지 로직
+        # "Y값이 2.3이 되면(2.5에 근접하면)" 조건 적용
+        if self.monitor_mode == "RETURNING":
+            # 1. Y축 기준 검사: 목표(2.5)에 대해 2.3 이상 올라오면 도착으로 간주 (y > 2.3)
+            #    혹은 단순 거리 계산 (안전하게 반경 0.5m)
+            dist_to_home = math.sqrt((x - HOME_X)**2 + (y - HOME_Y)**2)
+            
+            # (옵션) 사용자 요청대로 Y축 값만 명시적으로 볼 수도 있음
+            # if y >= 2.3: ...
+            
+            if dist_to_home < HOME_THRESHOLD:
+                self.monitor_mode = "IDLE"
+                self.current_mode = "IDLE"
+                self.get_logger().info(f"🏠 Arrived Home (y={y:.2f}, dist={dist_to_home:.2f}) -> IDLE")
 
         payload = {
             "car_code": CAR_CODE,
@@ -189,7 +198,7 @@ class MqttTotalControl(Node):
             "y": round(y, 2),
             "yaw": round(yaw, 2),
             "v": self.current_velocity,
-            "mode": status_code,  # IDLE, MOVING_TO_LOAD, LOADING, TOWING, UNLOADING, ...
+            "mode": self.monitor_mode,
             "battery": self.battery_level
         }
 
@@ -199,7 +208,6 @@ class MqttTotalControl(Node):
             self.get_logger().error(f"Publish Error: {e}")
 
     def send_ack(self, cmd, status):
-        """서버 명령에 대한 응답(ACK) 전송"""
         payload = {
             "car_code": CAR_CODE,
             "cmd": cmd,
@@ -216,70 +224,79 @@ class MqttTotalControl(Node):
             
             self.get_logger().info(f"📩 Recv [{topic}]: {data}")
 
-            # =========================================================
-            # [CASE 1] High-Level Control (autowing_car/v1/{code}/cmd/control)
-            # =========================================================
             if topic == TOPIC_CMD_CONTROL:
                 cmd = data.get("cmd")
                 
-                if cmd == "CONNECT": # Docking Request
-                    self.current_mode = "DOCKING"
-                    self.monitor_mode = "LOADING"
-                    self.get_logger().info("🕹️ CMD: CONNECT -> Start Docking")
-                    
-                elif cmd == "DISCONNECT": # Release Request
-                    self.current_mode = "RELEASE"
-                    self.monitor_mode = "UNLOADING"
-                    self.get_logger().info("🕹️ CMD: DISCONNECT -> Start Release")
-                    
-                elif cmd == "EMERGENCY_STOP":
-                    self.current_mode = "IDLE"
-                    self.monitor_mode = "STOP"
-                    self.get_logger().warn("🚨 CMD: EMERGENCY_STOP")
-                    
-                elif cmd == "SET_MODE":
-                    pass # 필요 시 구현
-                
-                # 명령 수신 ACK 즉시 전송 (동작 시작 알림)
-                self.send_ack(cmd, "PENDING")
+                if cmd == "EMERGENCY_STOP":
+                    if self.monitor_mode != "STOP":
+                        self.get_logger().warn("🚨 EMERGENCY STOP RECEIVED")
+                        self.paused_context = {
+                            "internal_mode": self.current_mode,
+                            "monitor_mode": self.monitor_mode,
+                            "final_action": self.pending_final_action,
+                            "drive_path": self.latest_drive_path
+                        }
+                        
+                        # 정지 명령 (빈 경로)
+                        self.path_pub.publish(String(data="[]"))
+                        
+                        self.current_mode = "IDLE"
+                        self.monitor_mode = "STOP"
+                        self.send_ack(cmd, "SUCCESS_PAUSED")
+                    else:
+                        self.send_ack(cmd, "ALREADY_STOPPED")
 
-            # =========================================================
-            # [CASE 2] Autonomous Drive (autowing_car/v1/{code}/cmd/drive)
-            # =========================================================
+                elif cmd == "RESUME":
+                    if self.monitor_mode == "STOP" and self.paused_context:
+                        self.get_logger().info("▶️ RESUME Command Received")
+                        ctx = self.paused_context
+                        self.current_mode = ctx["internal_mode"]
+                        self.monitor_mode = ctx["monitor_mode"]
+                        self.pending_final_action = ctx["final_action"]
+                        saved_path = ctx["drive_path"]
+
+                        if self.current_mode == "DRIVING" and saved_path:
+                            self.path_pub.publish(String(data=json.dumps(saved_path)))
+                        
+                        self.paused_context = None
+                        self.send_ack(cmd, "SUCCESS_RESUMED")
+                    else:
+                        self.send_ack(cmd, "FAILED_NO_CONTEXT")
+                else:
+                    self.send_ack(cmd, "PENDING")
+
             elif topic == TOPIC_CMD_DRIVE:
-                # payload 예시:
-                # {"data":{"finalAction":"UNDOCK", "edgeIds":["E1","E2"]...}, "type":"DRIVE", ...}
-                
+                if self.monitor_mode == "STOP":
+                    self.send_ack("DRIVE", "FAILED_IN_STOP_MODE")
+                    return
+
                 msg_type = data.get("type")
                 if msg_type == "DRIVE":
                     drive_data = data.get("data", {})
                     edge_ids = drive_data.get("edgeIds", [])
                     final_action = drive_data.get("finalAction", "NONE")
                     
-                    self.get_logger().info(f"🚗 CMD: DRIVE (Action={final_action}, Edges={len(edge_ids)})")
+                    self.get_logger().info(f"🚗 CMD: DRIVE (Action={final_action})")
 
                     full_path = self.convert_edges_to_waypoints(edge_ids)
                     
                     if full_path:
                         self.pending_final_action = final_action
                         self.current_mode = "DRIVING"
+                        self.latest_drive_path = full_path
                         
-                        # 목적에 따른 모니터링 상태 설정
                         if final_action in ["DOCK", "CONNECT"]:
-                            self.driving_purpose = "MOVING_TO_LOAD"
-                        elif final_action in ["UNDOCK", "DISCONNECT", "PARK"]:
-                            self.driving_purpose = "MOVING_TO_IDLE"
+                            self.monitor_mode = "MOVING_TO_GATE"
+                        elif final_action in ["UNDOCK", "DISCONNECT"]:
+                            self.monitor_mode = "TOWING"
+                        elif final_action in ["PARK"]:
+                            self.monitor_mode = "RETURNING"
                         else:
-                            self.driving_purpose = "MOVING_TO_LOAD" # 기본값
+                            self.monitor_mode = "MOVING_TO_GATE"
 
-                        # 주행 컨트롤러로 경로 전송
-                        path_msg = String()
-                        path_msg.data = json.dumps(full_path)
-                        self.path_pub.publish(path_msg)
-                        
+                        self.path_pub.publish(String(data=json.dumps(full_path)))
                         self.send_ack("DRIVE", "SUCCESS")
                     else:
-                        self.get_logger().warn("⚠️ Path conversion failed")
                         self.send_ack("DRIVE", "FAILED_NO_PATH")
 
             self.publish_monitor_status()

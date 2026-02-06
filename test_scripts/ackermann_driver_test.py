@@ -204,7 +204,7 @@ class AckermannDriver(Node):
 
     def set_throttle_hardware(self, throttle):
         if not self.pca: return
-        throttle = max(-0.5, min(0.5, throttle))
+        throttle = max(-0.8, min(0.8, throttle))
         pulse = int(0xFFFF * abs(throttle))
         in1, in2, in3 = self.motor_channel + 5, self.motor_channel + 4, self.motor_channel + 3
 
