@@ -1,1 +1,0 @@
-/home/jetson/ros_ws/src/orin_car/test_scripts/marshaller_controller_test.py

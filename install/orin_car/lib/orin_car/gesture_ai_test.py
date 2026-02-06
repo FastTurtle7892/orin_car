@@ -1,1 +1,0 @@
-/home/jetson/ros_ws/src/orin_car/test_scripts/gesture_ai_test.py

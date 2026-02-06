@@ -1,1 +1,0 @@
-rclcpp;rclpy;sensor_msgs;nav_msgs;geometry_msgs;tf2;tf2_ros;ydlidar_ros2_driver;rf2o_laser_odometry;slam_toolbox;robot_state_publisher;joint_state_publisher;rviz2;usb_cam;web_video_server;python3-opencv;python3-numpy
