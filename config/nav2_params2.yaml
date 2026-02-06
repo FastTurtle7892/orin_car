@@ -1,34 +1,56 @@
+
 amcl:
   ros__parameters:
     use_sim_time: False
+
+    # 초기 분산은 "초기 정착"이 잘 된다 했으니 크게 건드리지 않음
     initial_cov_xx: 0.5
     initial_cov_yy: 0.5
     initial_cov_aa: 0.2
-    update_min_d: 0.15
-    update_min_a: 0.15
-    alpha1: 0.8
-    alpha2: 0.5
-    alpha3: 0.2
-    alpha4: 0.2
-    alpha5: 0.2
-    min_particles: 2000
-    max_particles: 5000
+
+    # 주행 중 흔들림 완화: 너무 잦은 보정(업데이트) 줄이기
+    update_min_d: 0.25          # 0.15 -> 0.25
+    update_min_a: 0.25          # 0.15 -> 0.25
+
+    # 주행 중 흔들림 1순위: 모션 모델 잡음(alpha*) 과대 제거
+    # (너무 크면 파티클이 과하게 퍼졌다가 라이다로 재수렴하며 map->odom이 요동)
+    alpha1: 0.12                # 0.8  -> 0.12
+    alpha2: 0.12                # 0.5  -> 0.12
+    alpha3: 0.08                # 0.2  -> 0.08
+    alpha4: 0.08                # 0.2  -> 0.08
+    alpha5: 0.05                # 0.2  -> 0.05
+
+    # 파티클: 너무 과하면 지연/드랍으로 흔들림처럼 보일 수 있음
+    min_particles: 800          # 2000 -> 800
+    max_particles: 2500         # 5000 -> 2500
     resample_interval: 1
+
     base_frame_id: "base_link"
     global_frame_id: "map"
     odom_frame_id: "odom"
     scan_topic: scan
+
     tf_broadcast: true
-    transform_tolerance: 1.2
-    laser_max_beams: 100
+
+    # TF/타임스탬프 이슈 완화: 너무 큰 tolerance는 흔들림을 키울 수 있음
+    transform_tolerance: 0.3    # 1.2 -> 0.3
+
+    # 레이저 모델: 정보량 보강 + 과민 완화
+    laser_max_beams: 240        # 100 -> 240 (CPU 여유 없으면 180)
     laser_model_type: "likelihood_field"
-    z_hit: 0.9
-    z_rand: 0.1
+
+    # 측정 모델 가중치 (기본 구조 유지)
+    z_hit: 0.85                 # 0.9 -> 0.85 (약간 완화)
+    z_rand: 0.10
     z_max: 0.05
     z_short: 0.05
-    sigma_hit: 0.15
+
+    # sigma_hit이 너무 작으면 예민해져 흔들릴 수 있음
+    sigma_hit: 0.25             # 0.15 -> 0.25
+
     lambda_short: 0.1
-    laser_likelihood_max_dist: 2.0
+    laser_likelihood_max_dist: 3.0   # 2.0 -> 3.0
+
 
 bt_navigator:
   ros__parameters:
@@ -39,6 +61,7 @@ bt_navigator:
     bt_loop_duration: 10
     default_server_timeout: 20
 
+
 controller_server:
   ros__parameters:
     use_sim_time: False
@@ -46,54 +69,49 @@ controller_server:
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.0
     min_theta_velocity_threshold: 0.001
-    
+
     failure_tolerance: 0.3
     progress_checker_plugin: "progress_checker"
-    goal_checker_plugins: ["general_goal_checker"] 
+    goal_checker_plugins: ["general_goal_checker"]
     controller_plugins: ["FollowPath"]
 
-    # [핵심 수정 1] 진행 확인(Progress Checker) 기준 대폭 완화
-    # 전진->후진 전환 시 제자리에서 멈추는 시간이 깁니다. 
-    # 기존 10초 -> 60초로 늘려, 잠깐 멈춰도 "고장"으로 판단하지 않게 합니다.
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
-      required_movement_radius: 0.05  # 0.1 -> 0.05 (조금만 움직여도 OK)
-      movement_time_allowance: 60.0   # 10.0 -> 60.0 (방향 전환 시간 충분히 확보)
-    
+      required_movement_radius: 0.05
+      movement_time_allowance: 60.0
+
     general_goal_checker:
       stateful: True
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.25
       yaw_goal_tolerance: 0.10
-    
+
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-      
+
       desired_linear_vel: 0.5
       max_linear_accel: 1.0
       max_linear_decel: 1.0
-      
       min_turning_radius: 0.5
-      
-      # [핵심 수정 2] 전환 포인트(Cusp) 접근성 향상
-      # 전환 지점에 아주 느리게(0.01)라도 가까이 붙을 수 있게 허용해야
-      # "도착했다"고 판단하고 다음 후진 경로로 넘어갑니다.
-      min_approach_linear_velocity: 0.01  # 0.05 -> 0.01 (중요)
+
+      min_approach_linear_velocity: 0.01
       approach_velocity_scaling_dist: 1.0
-      
+
       lookahead_dist: 0.8
       min_lookahead_dist: 0.5
       max_lookahead_dist: 1.2
       lookahead_time: 1.5
-      
+
       rotate_to_heading_at_start: false
       use_rotate_to_heading: false
       allow_reversing: true
+
       transform_tolerance: 0.5
       use_velocity_scaled_lookahead_dist: true
       use_collision_detection: true
       max_robot_pose_search_dist: 10.0
       use_interpolation: true
+
 
 local_costmap:
   local_costmap:
@@ -108,12 +126,14 @@ local_costmap:
       height: 3
       resolution: 0.05
       robot_radius: 0.15
-      
+
       plugins: ["voxel_layer", "inflation_layer"]
+
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 5.0
         inflation_radius: 0.25
+
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -132,8 +152,10 @@ local_costmap:
           data_type: "LaserScan"
           raytrace_max_range: 3.5
           obstacle_max_range: 2.5
+
       static_layer:
         map_subscribe_transient_local: True
+
 
 global_costmap:
   global_costmap:
@@ -146,7 +168,9 @@ global_costmap:
       robot_radius: 0.15
       resolution: 0.05
       track_unknown_space: true
+
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
@@ -159,24 +183,29 @@ global_costmap:
           data_type: "LaserScan"
           raytrace_max_range: 3.5
           obstacle_max_range: 2.5
+
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
+
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 5.0
         inflation_radius: 0.25
+
 
 map_server:
   ros__parameters:
     use_sim_time: False
     yaml_filename: "my_map.yaml"
 
+
 planner_server:
   ros__parameters:
     expected_planner_frequency: 20.0
     use_sim_time: False
     planner_plugins: ["GridBased"]
+
     GridBased:
       plugin: "nav2_smac_planner/SmacPlannerHybrid"
       downsample_costmap: false
@@ -185,7 +214,7 @@ planner_server:
       max_iterations: 1000000
       max_on_approach_iterations: 1000
       max_planning_time: 2.0
-      
+
       motion_model_for_search: "REEDS_SHEPP"
       angle_quantization_bins: 72
       minimum_turning_radius: 0.5
@@ -198,18 +227,21 @@ planner_server:
       debug_visualizations: false
       smooth_path: true
 
+
 recoveries_server:
   ros__parameters:
     costmap_topic: local_costmap/costmap_raw
     footprint_topic: local_costmap/published_footprint
     cycle_frequency: 10.0
     recovery_plugins: ["backup", "wait"]
+
     spin:
       plugin: "nav2_recoveries/Spin"
     backup:
       plugin: "nav2_recoveries/BackUp"
     wait:
       plugin: "nav2_recoveries/Wait"
+
     global_frame: odom
     robot_base_frame: base_link
     use_sim_time: False

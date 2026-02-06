@@ -1,0 +1,1 @@
+/home/jetson/ros_ws/src/orin_car/build/orin_car/ament_cmake_environment_hooks/pythonpath.sh

@@ -5,7 +5,8 @@ import asyncio
 import cv2
 import requests
 import websockets
-import logging
+import time
+from typing import Optional
 
 from av import VideoFrame
 from aiortc import (
@@ -34,17 +35,10 @@ LOGIN_PW    = os.environ.get("LOGIN_PW", "1234")
 CAR_ID   = os.environ.get("CAR_ID", "TC01")
 PILOT_ID = os.environ.get("PILOT_ID", "PILOT_001")
 
-# TLS verify (https 인증서 검증) : 기본 True
-# self-signed / 테스트면 WEBRTC_TLS_VERIFY=0 으로 끄기 가능
 TLS_VERIFY = os.environ.get("WEBRTC_TLS_VERIFY", "1").strip().lower() not in ("0", "false", "no")
 
-# START 없이도 바로 offer 만들고 싶으면(디버그용)
-AUTO_START = os.environ.get("WEBRTC_AUTO_START", "0") == "1"
-
-# ICE gather wait seconds (aiortc는 trickle도 가능하지만, 최소 대기)
 ICE_GATHER_WAIT = float(os.environ.get("WEBRTC_ICE_GATHER_WAIT", "1.5"))
 
-# 포트 기반 스킴 자동
 SCHEME = os.environ.get("WEBRTC_SCHEME", "").strip().lower()
 if not SCHEME:
     SCHEME = "https" if WEBRTC_PORT in ("443", "8443") else "http"
@@ -53,10 +47,7 @@ WS_SCHEME = "wss" if SCHEME == "https" else "ws"
 LOGIN_URL = f"{SCHEME}://{WEBRTC_HOST}:{WEBRTC_PORT}/api/auth/login"
 SERVER_WS_BASE = f"{WS_SCHEME}://{WEBRTC_HOST}:{WEBRTC_PORT}/ws-server/websocket"
 
-
-# TURN/STUN (여긴 네가 “동작하던 값”으로 맞추는 게 중요)
 ICE_SERVERS = [
-    # ✅ 너가 예전에 쓰던 계정/암호로 되돌리는 걸 권장
     RTCIceServer(urls=["turn:i14a402.p.ssafy.io:8000"], username="pilot@atc.com", credential="1234"),
     RTCIceServer(urls=["stun:stun.l.google.com:19302"]),
 ]
@@ -64,10 +55,18 @@ RTC_CONFIG = RTCConfiguration(iceServers=ICE_SERVERS)
 
 
 # -------------------------------
+# Logging
+# -------------------------------
+def log(*args):
+    ts = time.strftime("%H:%M:%S")
+    print(f"[{ts}]", *args, flush=True)
+
+
+# -------------------------------
 # Helpers
 # -------------------------------
-def login_and_get_token():
-    print(f"[Login] Trying to login as {LOGIN_EMAIL}... ({LOGIN_URL})")
+def login_and_get_token() -> Optional[str]:
+    log(f"[Login] POST {LOGIN_URL} as {LOGIN_EMAIL}")
     try:
         resp = requests.post(
             LOGIN_URL,
@@ -75,17 +74,18 @@ def login_and_get_token():
             timeout=5,
             verify=TLS_VERIFY,
         )
+        log(f"[Login] status={resp.status_code}")
         if resp.status_code != 200:
-            print(f"[Login] Failed: {resp.status_code} {resp.text}")
+            log(f"[Login] Failed body={resp.text[:200]}")
             return None
         token = resp.json().get("socketToken")
         if not token:
-            print("[Login] No socketToken in response.")
+            log("[Login] No socketToken in response.")
             return None
-        print("[Login] Success! Token acquired.")
+        log("[Login] Success! socketToken acquired.")
         return token
     except Exception as e:
-        print(f"[Login] Error: {e}")
+        log(f"[Login] Error: {e}")
         return None
 
 
@@ -112,43 +112,22 @@ def parse_stomp_message(frame: str):
 
 # -------------------------------
 # Shared Camera Track
-# cam_manager는 get_latest_frame(copy=True) 제공한다고 가정
+# cam_manager.get_latest_frame(copy=True) 가 ndarray(BGR) 리턴한다고 가정
 # -------------------------------
 class CameraStreamTrack(VideoStreamTrack):
     def __init__(self, cam_manager):
         super().__init__()
         self.cam = cam_manager
-        self._send_event = asyncio.Event()
-        self._send_event.clear()  # 기본: STOP 상태 (START 받으면 resume)
-        self._fps_cnt = 0
-        self._fps_t0 = asyncio.get_event_loop().time()
-
-    def pause(self):
-        print("[WebRTC] PAUSE stream")
-        self._send_event.clear()
-
-    def resume(self):
-        print("[WebRTC] RESUME stream")
-        self._send_event.set()
 
     async def recv(self):
-        # START 전까지 대기
-        await self._send_event.wait()
-
+        # ✅ 여기서는 "멈춤" 로직을 track 안에 두지 않음
+        # (우리는 PC 자체를 끊었다 켰다 할 거라서)
         pts, time_base = await self.next_timestamp()
 
         frame = self.cam.get_latest_frame(copy=True)
         while frame is None:
             await asyncio.sleep(0.01)
             frame = self.cam.get_latest_frame(copy=True)
-
-        # 디버그: 송출 fps 찍기(너무 시끄러우면 주석)
-        #self._fps_cnt += 1
-        #now = asyncio.get_event_loop().time()
-        #if now - self._fps_t0 > 1.0:
-        #    print(f"[WebRTC] sending fps ~ {self._fps_cnt}")
-        #    self._fps_cnt = 0
-        #    self._fps_t0 = now
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         vf = VideoFrame.from_ndarray(rgb, format="rgb24")
@@ -158,65 +137,27 @@ class CameraStreamTrack(VideoStreamTrack):
 
 
 # -------------------------------
-# Main entry for video_stack
+# Main entry
 # -------------------------------
 async def webrtc_main(cam_manager):
     token = login_and_get_token()
     if not token:
-        print("[WebRTC] Login failed. Continue without WebRTC.")
+        log("[WebRTC] Login failed -> abort webrtc_main")
         return
 
     ws_url = f"{SERVER_WS_BASE}?socket_token={token}"
-    # 토큰 마스킹
-    tmask = token[:16] + "..." if len(token) > 16 else token
-    print("==== WebRTC Sender (SharedCam) ====")
-    print(f"Server: {SERVER_WS_BASE}?socket_token={tmask}")
-
-    pc = RTCPeerConnection(RTC_CONFIG)
-    track = CameraStreamTrack(cam_manager)
-    pc.addTrack(track)
+    log("==== WebRTC Sender (Reconnect-on-START) ====")
+    log(f"WS URL: {SERVER_WS_BASE}?socket_token=***")
 
     send_q: asyncio.Queue[str] = asyncio.Queue()
     loop = asyncio.get_running_loop()
 
-    # ---- 상태 로그 (진짜 연결 붙는지 확인) ----
-    @pc.on("iceconnectionstatechange")
-    async def _on_ice_state():
-        print("[WebRTC] iceConnectionState =", pc.iceConnectionState)
+    pc: Optional[RTCPeerConnection] = None
+    track: Optional[CameraStreamTrack] = None
+    offer_seq = 0
 
-    @pc.on("connectionstatechange")
-    async def _on_conn_state():
-        print("[WebRTC] connectionState =", pc.connectionState)
-
-    @pc.on("signalingstatechange")
-    async def _on_sig_state():
-        print("[WebRTC] signalingState =", pc.signalingState)
-
-    # ---- 차량 ICE 후보도 서버로 송신 (중요!) ----
-    # aiortc 콜백은 sync라서 thread-safe enqueue 필요
-    def _enqueue_send(msg: str):
+    def enqueue_send(msg: str):
         asyncio.run_coroutine_threadsafe(send_q.put(msg), loop)
-
-    @pc.on("icecandidate")
-    def _on_icecandidate(event):
-        cand = event.candidate
-        if cand is None:
-            return
-
-        payload = {
-            "type": "ICE",
-            "candidate": cand.candidate,
-            "sdpMid": cand.sdpMid,
-            "sdpMLineIndex": cand.sdpMLineIndex,
-            "senderId": CAR_ID,
-            "receiverId": PILOT_ID,
-        }
-        frame = stomp_frame(
-            "SEND",
-            {"destination": "/app/video/ice", "content-type": "application/json"},
-            json.dumps(payload),
-        )
-        _enqueue_send(frame)
 
     async def ws_sender(ws):
         while True:
@@ -225,23 +166,76 @@ async def webrtc_main(cam_manager):
                 return
             await ws.send(msg)
 
-    offer_sent = False
-    answered = False
-    last_answer_sdp = None
-
-    async def start_streaming():
-        nonlocal offer_sent
-        if offer_sent:
-            print("[WebRTC] START received but offer already sent -> ignore")
+    async def close_pc(reason: str):
+        nonlocal pc, track
+        if pc is None:
+            log(f"[WebRTC] close_pc({reason}) but pc=None -> skip")
             return
+        try:
+            log(f"[WebRTC] closing PC... reason={reason} state={pc.connectionState} ice={pc.iceConnectionState} sig={pc.signalingState}")
+            await pc.close()
+        except Exception as e:
+            log(f"[WebRTC] pc.close error: {e}")
+        pc = None
+        track = None
+        log("[WebRTC] PC closed.")
 
-        print("[WebRTC] START received -> create offer")
-        track.resume()
+    async def create_and_offer():
+        """
+        ✅ 무조건 새 PeerConnection 만들고 새 Offer 송신
+        """
+        nonlocal pc, track, offer_seq
 
+        # 이미 있으면 먼저 닫고 새로
+        if pc is not None:
+            await close_pc("recreate_before_offer")
+
+        offer_seq += 1
+        my_seq = offer_seq
+
+        pc = RTCPeerConnection(RTC_CONFIG)
+        track = CameraStreamTrack(cam_manager)
+        pc.addTrack(track)
+
+        # 상태 로그
+        @pc.on("iceconnectionstatechange")
+        async def _ice_state():
+            log(f"[WebRTC#{my_seq}] iceConnectionState={pc.iceConnectionState}")
+
+        @pc.on("connectionstatechange")
+        async def _conn_state():
+            log(f"[WebRTC#{my_seq}] connectionState={pc.connectionState}")
+
+        @pc.on("signalingstatechange")
+        async def _sig_state():
+            log(f"[WebRTC#{my_seq}] signalingState={pc.signalingState}")
+
+        # ICE 후보 송신
+        @pc.on("icecandidate")
+        def _on_icecandidate(event):
+            cand = event.candidate
+            if cand is None:
+                return
+            payload = {
+                "type": "ICE",
+                "candidate": cand.candidate,
+                "sdpMid": cand.sdpMid,
+                "sdpMLineIndex": cand.sdpMLineIndex,
+                "senderId": CAR_ID,
+                "receiverId": PILOT_ID,
+            }
+            frame = stomp_frame(
+                "SEND",
+                {"destination": "/app/video/ice", "content-type": "application/json"},
+                json.dumps(payload),
+            )
+            enqueue_send(frame)
+
+        log(f"[WebRTC#{my_seq}] createOffer...")
         offer = await pc.createOffer()
         await pc.setLocalDescription(offer)
 
-        # (선택) 약간 기다려서 ICE가 SDP에 어느 정도 붙도록
+        log(f"[WebRTC#{my_seq}] localDescription set. wait ICE gather {ICE_GATHER_WAIT}s")
         await asyncio.sleep(ICE_GATHER_WAIT)
 
         payload = {
@@ -249,6 +243,7 @@ async def webrtc_main(cam_manager):
             "sdp": pc.localDescription.sdp,
             "senderId": CAR_ID,
             "receiverId": PILOT_ID,
+            "seq": my_seq,  # 디버그용(서버가 무시해도 OK)
         }
         await send_q.put(
             stomp_frame(
@@ -257,8 +252,44 @@ async def webrtc_main(cam_manager):
                 json.dumps(payload),
             )
         )
-        offer_sent = True
-        print("[WebRTC] OFFER sent")
+        log(f"[WebRTC#{my_seq}] OFFER sent to {PILOT_ID}")
+
+    async def handle_answer(data: dict):
+        nonlocal pc
+        if pc is None:
+            log("[WebRTC] ANSWER received but pc=None -> ignore")
+            return
+        sdp = data.get("sdp")
+        if not sdp:
+            log("[WebRTC] ANSWER has no sdp -> ignore")
+            return
+
+        # 상태가 이상하면 로그만 남기고 무시(재연결 방식이라 굳이 억지로 안 맞춤)
+        if pc.signalingState != "have-local-offer":
+            log(f"[WebRTC] ANSWER in state={pc.signalingState} -> ignore (will reconnect on next START)")
+            return
+
+        log("[WebRTC] setRemoteDescription(ANSWER)")
+        try:
+            await pc.setRemoteDescription(RTCSessionDescription(sdp=sdp, type="answer"))
+            log("[WebRTC] ANSWER applied OK")
+        except Exception as e:
+            log(f"[WebRTC] setRemoteDescription error: {e}")
+
+    async def handle_ice(data: dict):
+        nonlocal pc
+        if pc is None:
+            return
+        try:
+            cand_sdp = data.get("candidate")
+            if not cand_sdp:
+                return
+            cand = candidate_from_sdp(cand_sdp)
+            cand.sdpMid = data.get("sdpMid", "0")
+            cand.sdpMLineIndex = int(data.get("sdpMLineIndex", 0))
+            await pc.addIceCandidate(cand)
+        except Exception as e:
+            log(f"[WebRTC] addIceCandidate error: {e}")
 
     # -------------------------------
     # STOMP session
@@ -269,17 +300,15 @@ async def webrtc_main(cam_manager):
         # CONNECT
         await send_q.put(stomp_frame("CONNECT", {"accept-version": "1.2", "host": "localhost"}))
         first = await ws.recv()
+        log("[STOMP] first=", first[:80].replace("\n", "\\n"))
         if "CONNECTED" in first:
-            print("[STOMP] CONNECTED")
+            log("[STOMP] CONNECTED")
 
-        # SUBSCRIBE topics
+        # SUBSCRIBE
         await send_q.put(stomp_frame("SUBSCRIBE", {"id": "sub-ctrl", "destination": f"/topic/video/control/{CAR_ID}"}))
         await send_q.put(stomp_frame("SUBSCRIBE", {"id": "sub-ans",  "destination": f"/topic/video/answer/{CAR_ID}"}))
         await send_q.put(stomp_frame("SUBSCRIBE", {"id": "sub-ice",  "destination": f"/topic/video/ice/{CAR_ID}"}))
-
-        # 디버그: 시작 신호 없이도 바로 송출하고 싶으면
-        if AUTO_START:
-            await start_streaming()
+        log("[STOMP] SUBSCRIBED control/answer/ice")
 
         async for raw in ws:
             data = parse_stomp_message(raw)
@@ -287,61 +316,26 @@ async def webrtc_main(cam_manager):
                 continue
 
             t = data.get("type")
+            log(f"[STOMP] recv type={t} payload_keys={list(data.keys())}")
 
-            if t == "START":
-                await start_streaming()
+            # ✅ 너가 원하는 방식:
+            # START(또는 RESUME) -> 무조건 새 PC + 새 Offer
+            # PAUSE/STOP -> PC 닫기
+            if t in ("START", "RESUME"):
+                await create_and_offer()
 
             elif t in ("PAUSE", "STOP"):
-                track.pause()
-
-            elif t == "RESUME":
-                track.resume()
+                await close_pc(t)
 
             elif t == "ANSWER":
-                sdp = data.get("sdp")
-                if not sdp:
-                    continue
-
-                # ✅ 중복 ANSWER 무시
-                if answered:
-                    if sdp == last_answer_sdp:
-                        print("[WebRTC] ANSWER duplicate (same sdp) -> ignore")
-                    else:
-                        print("[WebRTC] ANSWER received again (different sdp) -> ignore")
-                    continue
-
-                # ✅ 지금 상태가 answer 받을 상태인지 가드
-                if pc.signalingState != "have-local-offer":
-                    print(f"[WebRTC] ANSWER in state={pc.signalingState} -> ignore")
-                    continue
-
-                print("[WebRTC] ANSWER received -> setRemoteDescription")
-                await pc.setRemoteDescription(RTCSessionDescription(sdp=sdp, type="answer"))
-                answered = True
-                last_answer_sdp = sdp
+                await handle_answer(data)
 
             elif t == "ICE":
-                # Pilot -> Car ICE
-                try:
-                    cand_sdp = data.get("candidate")
-                    if not cand_sdp:
-                        continue
-                    cand = candidate_from_sdp(cand_sdp)
-                    cand.sdpMid = data.get("sdpMid", "0")
-                    cand.sdpMLineIndex = int(data.get("sdpMLineIndex", 0))
-                    await pc.addIceCandidate(cand)
-                except Exception as e:
-                    print(f"[WebRTC] ICE error: {e}")
+                await handle_ice(data)
 
-        # 종료 처리
+        # 종료
         await send_q.put(None)
         await sender_task
 
-    await pc.close()
-    print("[WebRTC] closed")
-
-
-# Standalone run (옵션)
-if __name__ == "__main__":
-    print("[webrtc_sharedcam] This module is intended to be called by video_stack with a shared cam_manager.")
-    print("[webrtc_sharedcam] If you want standalone test, set WEBRTC_AUTO_START=1 and ensure your video_stack provides cam_manager.")
+    await close_pc("ws_end")
+    log("[WebRTC] webrtc_main end")

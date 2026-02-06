@@ -1,0 +1,1 @@
+/home/jetson/ros_ws/src/orin_car/test_scripts/generate_nav2_json.py

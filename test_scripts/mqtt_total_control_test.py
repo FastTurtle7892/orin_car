@@ -16,9 +16,9 @@ from datetime import datetime
 # ================= [설정] =================
 MQTT_BROKER = "autowingcar.o-r.kr" 
 MQTT_PORT = 8883
-CAR_CODE = "TC01"  # 가이드의 car_code
+CAR_CODE = "TC01"
 
-# [가이드 v1.1] 토픽 설정
+# 토픽 설정
 TOPIC_CMD_CONTROL = f"autowing_car/v1/{CAR_CODE}/cmd/control"
 TOPIC_CMD_DRIVE   = f"autowing_car/v1/{CAR_CODE}/cmd/drive"
 TOPIC_MONITORING = "autowing_car/v1/monitoring"
@@ -26,10 +26,9 @@ TOPIC_ACK        = "autowing_car/v1/ack"
 
 MAP_DATA_PATH = os.path.expanduser("~/map_data.json")
 
-# ✅ [수정] 출발지(Home) 좌표 설정
+# 출발지(Home) 좌표
 HOME_X = -0.8893
 HOME_Y = 2.5
-# 반경 0.5m 이내면 도착 처리 (Y=2.3 통과 시점 포함)
 HOME_THRESHOLD = 0.5  
 
 def euler_from_quaternion(x, y, z, w):
@@ -50,7 +49,7 @@ class MqttTotalControl(Node):
         super().__init__('mqtt_total_control')
         
         self.get_logger().info("============================================")
-        self.get_logger().info(f"📢 [MQTT] v1.5 Double-Action Fix ({CAR_CODE})")
+        self.get_logger().info(f"📢 [MQTT] 모든 명령 Fail-Safe (IDLE Reset) 적용")
         self.get_logger().info("============================================")
         
         self.map_data = {}
@@ -69,11 +68,8 @@ class MqttTotalControl(Node):
         self.mode_pub = self.create_publisher(String, '/system_mode', qos_profile)
         self.path_pub = self.create_publisher(String, '/driving/path_cmd', qos_profile)
         
-        # 내부 상태 변수
-        self.current_mode = "IDLE"  # 로봇 내부 제어 모드
-        self.monitor_mode = "IDLE"  # 서버 모니터링용 상태
-        
-        # ✅ [핵심 수정] 중복 발행 방지를 위한 변수 추가
+        self.current_mode = "IDLE"
+        self.monitor_mode = "IDLE"
         self.last_published_mode = None 
         
         self.current_pose = None
@@ -81,17 +77,14 @@ class MqttTotalControl(Node):
         self.current_velocity = 0.0
         
         self.pending_final_action = "NONE"
-        
-        # 작업 저장 컨텍스트 (비상 정지/재개용)
         self.paused_context = None 
         self.latest_drive_path = []
 
         self.create_timer(0.5, self.publish_mode_periodic)
         self.create_timer(1.0, self.publish_monitor_status) 
 
-        # MQTT Client 설정
+        # MQTT Client
         self.client = mqtt.Client(client_id=f"{CAR_CODE}_edge", protocol=mqtt.MQTTv311)
-        
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
@@ -134,43 +127,35 @@ class MqttTotalControl(Node):
         data = msg.data
         self.get_logger().info(f"✅ Task Completed: {data}")
         
-        # 1. 도킹 완료
         if data == "DOCKING_COMPLETE":
             self.current_mode = "IDLE"
             self.monitor_mode = "TOWING"
             self.send_ack("CONNECT", "SUCCESS")
             self.publish_monitor_status()
 
-        # 2. 그리퍼 해제 완료 -> WAITING_FOR_RETURN 상태로 대기
+        # ✅ 그리퍼 해제 -> 마샬러 모드로 전환
         elif data == "RELEASE_COMPLETE":
-            self.current_mode = "IDLE"
-            self.monitor_mode = "WAITING_FOR_RETURN"  
+            self.get_logger().info("🔓 그리퍼 해제 완료 -> 👮 마샬러 모드 자동 진입")
+            self.current_mode = "MARSHAL"
+            self.monitor_mode = "MARSHALING"
             self.send_ack("DISCONNECT", "SUCCESS")
             self.publish_monitor_status()
 
-        # 3. 주행 완료
         elif data == "DRIVING_COMPLETE":
             self.get_logger().info(f"🏁 Driving Finished. Final Action: {self.pending_final_action}")
             
-            if self.pending_final_action == "DOCK" or self.pending_final_action == "CONNECT":
+            if self.pending_final_action in ["DOCK", "CONNECT"]:
                 self.current_mode = "DOCKING"
                 self.monitor_mode = "DOCKING"
-                
-            elif self.pending_final_action == "UNDOCK" or self.pending_final_action == "DISCONNECT":
+            elif self.pending_final_action in ["UNDOCK", "DISCONNECT"]:
                 self.current_mode = "RELEASE"
                 self.monitor_mode = "UNDOCKING"
-            
-            # [복귀 시나리오] PARK 명령으로 주행이 끝났을 때
             elif self.pending_final_action == "PARK":
                 self.current_mode = "PARK" 
                 self.monitor_mode = "RETURNING"
-
-            # [마샬러 시나리오] Node 7/8 도착 시 마샬러 모드 실행
             elif self.pending_final_action == "MARSHAL":
-                self.get_logger().info("👮 도착 완료. 마샬러(수신호 인식) 모드로 전환합니다.")
                 self.current_mode = "MARSHAL"
                 self.monitor_mode = "MARSHALING"
-                
             else:
                 self.current_mode = "IDLE"
                 self.monitor_mode = "IDLE"
@@ -179,8 +164,6 @@ class MqttTotalControl(Node):
             self.latest_drive_path = []
 
     def publish_mode_periodic(self):
-        # ✅ [핵심 수정] 모드가 실제로 변경되었을 때만 토픽을 발행합니다.
-        # 이렇게 하면 큐에 'RELEASE' 메시지가 쌓여서 두 번 실행되는 것을 방지합니다.
         if self.current_mode != self.last_published_mode:
             self.get_logger().info(f"📢 System Mode Changed: {self.last_published_mode} -> {self.current_mode}")
             msg = String()
@@ -200,15 +183,12 @@ class MqttTotalControl(Node):
                 self.current_pose.orientation.z, self.current_pose.orientation.w
             )
 
-        # ✅ [집 도착 감지] 
-        # RETURNING 상태일 때 집 좌표(HOME_X, HOME_Y) 반경 안에 들면 IDLE로 전환
         if self.monitor_mode == "RETURNING":
             dist_to_home = math.sqrt((x - HOME_X)**2 + (y - HOME_Y)**2)
-            
             if dist_to_home < HOME_THRESHOLD:
                 self.monitor_mode = "IDLE"
                 self.current_mode = "IDLE"
-                self.get_logger().info(f"🏠 Arrived Home (y={y:.2f}, dist={dist_to_home:.2f}) -> IDLE")
+                self.get_logger().info(f"🏠 Arrived Home -> IDLE")
 
         payload = {
             "car_code": CAR_CODE,
@@ -245,6 +225,7 @@ class MqttTotalControl(Node):
             if topic == TOPIC_CMD_CONTROL:
                 cmd = data.get("cmd")
                 
+                # 1. EMERGENCY_STOP
                 if cmd == "EMERGENCY_STOP":
                     if self.monitor_mode != "STOP":
                         self.get_logger().warn("🚨 EMERGENCY STOP RECEIVED")
@@ -254,36 +235,45 @@ class MqttTotalControl(Node):
                             "final_action": self.pending_final_action,
                             "drive_path": self.latest_drive_path
                         }
-                        
-                        # 정지 명령
                         self.path_pub.publish(String(data="[]"))
-                        
                         self.current_mode = "IDLE"
                         self.monitor_mode = "STOP"
                         self.send_ack(cmd, "SUCCESS_PAUSED")
                     else:
                         self.send_ack(cmd, "ALREADY_STOPPED")
 
+                # 2. RESUME (재개)
                 elif cmd == "RESUME":
-                    if self.monitor_mode == "STOP" and self.paused_context:
-                        self.get_logger().info("▶️ RESUME Command Received")
-                        ctx = self.paused_context
-                        self.current_mode = ctx["internal_mode"]
-                        self.monitor_mode = ctx["monitor_mode"]
-                        self.pending_final_action = ctx["final_action"]
-                        saved_path = ctx["drive_path"]
+                    if self.monitor_mode == "STOP":
+                        if self.paused_context:
+                            self.get_logger().info("▶️ RESUME Command Received")
+                            ctx = self.paused_context
+                            self.current_mode = ctx["internal_mode"]
+                            self.monitor_mode = ctx["monitor_mode"]
+                            self.pending_final_action = ctx["final_action"]
+                            saved_path = ctx["drive_path"]
 
-                        if self.current_mode == "DRIVING" and saved_path:
-                            self.path_pub.publish(String(data=json.dumps(saved_path)))
-                        
-                        self.paused_context = None
-                        self.send_ack(cmd, "SUCCESS_RESUMED")
+                            if self.current_mode == "DRIVING" and saved_path:
+                                self.path_pub.publish(String(data=json.dumps(saved_path)))
+                            
+                            self.paused_context = None
+                            self.send_ack(cmd, "SUCCESS_RESUMED")
+                        else:
+                            # ✅ [핵심 수정] 복구할 정보가 없으면 IDLE로 초기화 (STOP 탈출)
+                            self.get_logger().warn("⚠️ RESUME 실패 (저장된 상태 없음) -> IDLE로 초기화")
+                            self.current_mode = "IDLE"
+                            self.monitor_mode = "IDLE"
+                            self.send_ack(cmd, "RESET_TO_IDLE")
                     else:
-                        self.send_ack(cmd, "FAILED_NO_CONTEXT")
-                else:
-                    self.send_ack(cmd, "PENDING")
+                        self.send_ack(cmd, "NOT_IN_STOP_MODE")
 
             elif topic == TOPIC_CMD_DRIVE:
+                # 마샬러 모드일 때 차단
+                if self.monitor_mode == "MARSHALING" or self.current_mode == "MARSHAL":
+                    self.get_logger().warn("🛡️ 마샬러 모드 실행 중! 서버의 주행 명령을 무시합니다.")
+                    self.send_ack("DRIVE", "IGNORED_IN_MARSHAL_MODE")
+                    return
+
                 if self.monitor_mode == "STOP":
                     self.send_ack("DRIVE", "FAILED_IN_STOP_MODE")
                     return
@@ -294,8 +284,6 @@ class MqttTotalControl(Node):
                     edge_ids = drive_data.get("edgeIds", [])
                     final_action = drive_data.get("finalAction", "NONE")
                     
-                    self.get_logger().info(f"🚗 CMD: DRIVE (Action={final_action})")
-
                     full_path = self.convert_edges_to_waypoints(edge_ids)
                     
                     if full_path:
@@ -303,26 +291,19 @@ class MqttTotalControl(Node):
                         self.current_mode = "DRIVING"
                         self.latest_drive_path = full_path
                         
-                        # [상태 전이 로직]
-                        if final_action in ["DOCK", "CONNECT"]:
-                            self.monitor_mode = "MOVING_TO_GATE"
-                        elif final_action in ["UNDOCK", "DISCONNECT"]:
-                            self.monitor_mode = "TOWING"
-                        
-                        # [요청사항] PARK 명령이 들어오면 RETURNING으로 변경
-                        elif final_action in ["PARK"]:
-                            self.monitor_mode = "RETURNING"
-                        
-                        # [마샬러]
-                        elif final_action == "MARSHAL":
-                            self.monitor_mode = "MOVING_TO_GATE"
-
-                        else:
-                            self.monitor_mode = "MOVING_TO_GATE"
+                        if final_action in ["DOCK", "CONNECT"]: self.monitor_mode = "MOVING_TO_GATE"
+                        elif final_action in ["UNDOCK", "DISCONNECT"]: self.monitor_mode = "TOWING"
+                        elif final_action in ["PARK"]: self.monitor_mode = "RETURNING"
+                        else: self.monitor_mode = "MOVING_TO_GATE"
 
                         self.path_pub.publish(String(data=json.dumps(full_path)))
                         self.send_ack("DRIVE", "SUCCESS")
                     else:
+                        # ✅ [핵심 수정] 주행 실패 시에도 IDLE로 초기화
+                        self.get_logger().warn("⚠️ 경로 생성 실패 -> IDLE로 초기화")
+                        self.current_mode = "IDLE"
+                        self.monitor_mode = "IDLE"
+                        self.pending_final_action = "NONE"
                         self.send_ack("DRIVE", "FAILED_NO_PATH")
 
             self.publish_monitor_status()
@@ -337,8 +318,6 @@ class MqttTotalControl(Node):
                 points = self.map_data[edge_id]
                 if isinstance(points, list):
                     waypoints.extend(points)
-            else:
-                self.get_logger().warn(f"❌ Unknown Edge ID: {edge_id}")
         return waypoints
 
 def main(args=None):
