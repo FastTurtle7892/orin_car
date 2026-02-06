@@ -136,11 +136,13 @@ class MqttTotalControl(Node):
             self.current_mode = "IDLE"
             self.monitor_mode = "TOWING"
             self.send_ack("CONNECT", "SUCCESS")
+            self.publish_monitor_status()
 
         elif data == "RELEASE_COMPLETE":
             self.current_mode = "IDLE"
             self.monitor_mode = "WAITING_FOR_RETURN"
             self.send_ack("DISCONNECT", "SUCCESS")
+            self.publish_monitor_status()
 
         elif data == "DRIVING_COMPLETE":
             self.get_logger().info(f"🏁 Driving Finished. Final Action: {self.pending_final_action}")
