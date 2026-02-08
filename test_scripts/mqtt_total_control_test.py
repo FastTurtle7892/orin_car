@@ -50,20 +50,24 @@ class MqttTotalControl(Node):
         super().__init__('mqtt_total_control')
         
         self.get_logger().info("============================================")
-        self.get_logger().info(f"📢 [MQTT] 개별 파일 절대 경로 매핑 모드")
+        self.get_logger().info(f"📢 [MQTT] 하이브리드 매핑 모드 (CMD + Nav2)")
         self.get_logger().info(f"📂 타겟 폴더: {DATA_ROOT_DIR}")
         self.get_logger().info("============================================")
         
-        # ✅ [매핑 설정] Edge ID -> 파일명 (map_data.json 안 씀)
-        # 여기에 실제 엣지 ID와 파일명을 매칭시키세요.
+        # ✅ [매핑 설정] 요청하신 대로 n4~n7은 하드코딩, n7~n8은 Nav2(파일)로 설정
         self.edge_to_file_map = {
+            # 1. 초반 Nav2 구간
             "E_n1_to_n2": "P1-1_origin",
             "E_n2_to_n3": "P2-1_origin",
             "E_n3_to_n4": "P3-1_origin",
-            "E_n4_to_n5": "P4-1_origin",
-            "E_n5_to_n6": "P5-1_origin",
-            "E_n6_to_n7": "P6-1_origin",
-            "E_n7_to_n8": "P7-1_origin"
+            
+            # 2. 중간 하드코딩 구간
+            "E_n4_to_n5": "CMD_HARD_RIGHT_2S",       # 우회전 30도, 전진 2초
+            "E_n5_to_n6": "CMD_HARD_LEFT_BACK_2S",   # 좌회전 30도, 후진 2초
+            "E_n6_to_n7": "CMD_HARD_RIGHT_40_3S",    # 우회전 40도, 전진 3초
+            
+            # 3. 마지막 n8로 가는 구간 (Nav2 사용 요청 반영)
+            "E_n7_to_n8": "CMD_HARD_FWD_1S"              # 파일 이름은 기존 규칙에 따름
         }
         self.get_logger().info(f"🗺️ 매핑 로드됨: {self.edge_to_file_map}")
 
@@ -273,7 +277,7 @@ class MqttTotalControl(Node):
                     edge_ids = drive_data.get("edgeIds", [])
                     final_action = drive_data.get("finalAction", "NONE")
                     
-                    # ✅ [변환] 엣지 ID -> 절대 경로 리스트 (map_data 없음)
+                    # ✅ [변환] 엣지 ID -> (절대 경로 or CMD 문자열) 리스트
                     abs_path_list = self.convert_edges_to_absolute_paths(edge_ids)
                     
                     if abs_path_list:
@@ -301,19 +305,21 @@ class MqttTotalControl(Node):
             self.get_logger().error(f"Parsing Error: {e}")
 
     def convert_edges_to_absolute_paths(self, edge_ids):
-        """ 엣지 ID를 받아서, trailer_paths4 안의 파일 절대 경로로 변환 """
+        """ 엣지 ID를 받아서, CMD는 그대로, 파일은 절대 경로로 변환 """
         path_list = []
         for edge_id in edge_ids:
             if edge_id in self.edge_to_file_map:
-                filename = self.edge_to_file_map[edge_id]
+                mapped_val = self.edge_to_file_map[edge_id]
                 
-                # 확장자 처리
-                if not filename.endswith('.json'):
-                    filename += '.json'
-                
-                # ✅ [절대 경로 생성]
-                full_path = os.path.join(DATA_ROOT_DIR, filename)
-                path_list.append(full_path)
+                # ✅ CMD_ 로 시작하면 파일 변환 없이 그대로 문자열 전달
+                if mapped_val.startswith("CMD_"):
+                    path_list.append(mapped_val)
+                else:
+                    filename = mapped_val
+                    if not filename.endswith('.json'):
+                        filename += '.json'
+                    full_path = os.path.join(DATA_ROOT_DIR, filename)
+                    path_list.append(full_path)
             else:
                 self.get_logger().error(f"❌ 맵핑 안 된 엣지 ID: {edge_id}")
                 return None 

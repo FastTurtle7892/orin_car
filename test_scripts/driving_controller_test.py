@@ -11,6 +11,8 @@ import json
 import math
 import os
 import numpy as np
+import threading
+import time
 
 # [설정] 경로 파일 폴더
 PATH_FOLDER = os.path.expanduser("~/trailer_paths5")
@@ -20,9 +22,8 @@ class DrivingController(Node):
         super().__init__('driving_controller')
         
         self.get_logger().info("====================================")
-        self.get_logger().info("🚗 [주행 컨트롤러] 경로 자동 병합(Merge) 모드 🚗") 
-        self.get_logger().info("   - 여러 파일이 들어오면 하나로 합쳐서 실행합니다.")
-        self.get_logger().info("   - 연결 부위에서 멈추지 않습니다.")
+        self.get_logger().info("🚗 [주행 컨트롤러] 하이브리드 시퀀스 모드 🚗") 
+        self.get_logger().info("   - CMD(하드코딩) + Nav2(파일) 자동 전환")
         self.get_logger().info("====================================")
         
         self.get_logger().info(f"📂 [Target Folder]: {PATH_FOLDER}")
@@ -41,13 +42,17 @@ class DrivingController(Node):
         self._action_client = ActionClient(self, FollowPath, 'follow_path')
         self.completion_pub = self.create_publisher(String, '/task_completion', 10)
         
-        # 초기 위치 파라미터
+        # Ackermann Driver 정보 (Wheelbase)
+        self.wheelbase = 0.145
+
+        # 초기 위치 파라미터 (사용자 요청 값 적용)
         self.declare_parameter('init_x', -0.8893)
         self.declare_parameter('init_y',  2.3)
         self.declare_parameter('init_yaw', -1.57) 
 
         self.current_mode = "IDLE"
         self.current_goal_handle = None
+        self.stop_signal = False  # 스레드 제어용
         self.timer_init = self.create_timer(5.0, self.set_initial_pose_once)
 
     def set_initial_pose_once(self):
@@ -72,8 +77,11 @@ class DrivingController(Node):
 
     def mode_callback(self, msg):
         self.current_mode = msg.data
-        if self.current_mode != "DRIVING" and self.current_goal_handle:
-            self.cancel_nav2()
+        if self.current_mode != "DRIVING":
+            self.stop_signal = True
+            if self.current_goal_handle:
+                self.cancel_nav2()
+            self._stop_robot()
 
     def path_callback(self, msg):
         if self.current_mode != "DRIVING":
@@ -81,65 +89,144 @@ class DrivingController(Node):
 
         try:
             path_input = json.loads(msg.data)
+            self.stop_signal = False
             
-            # 1. 파일명 리스트가 들어온 경우 -> [핵심] 병합 실행
-            if isinstance(path_input, list) and len(path_input) > 0 and isinstance(path_input[0], str):
-                self.get_logger().info(f"📥 [파일 리스트 수신]: {path_input}")
-                self.execute_merged_path(path_input)
+            # ✅ 리스트가 들어오면 하이브리드 시퀀스 실행 (파일+CMD 혼합 처리)
+            if isinstance(path_input, list) and len(path_input) > 0:
+                self.get_logger().info(f"📜 [작업 큐 수신] 총 {len(path_input)} 단계")
+                threading.Thread(target=self._run_hybrid_sequence, args=(path_input,), daemon=True).start()
                 
-            # 2. 파일명 하나만 들어온 경우
             elif isinstance(path_input, str):
-                self.execute_merged_path([path_input])
-                
-            # 3. 좌표 데이터가 직접 들어온 경우 (예외 처리)
-            elif isinstance(path_input, list) and len(path_input) > 0 and isinstance(path_input[0], list):
-                self.execute_raw_path(path_input)
+                 threading.Thread(target=self._run_hybrid_sequence, args=([path_input],), daemon=True).start()
 
         except Exception as e:
             self.get_logger().error(f"❌ Message Parsing Error: {e}")
 
-    # ✅ [핵심 기능] 여러 파일을 하나로 합치는 함수
-    def execute_merged_path(self, filenames):
-        all_xs, all_ys, all_yaws = [], [], []
-        
-        self.get_logger().info("🔄 경로 병합 시작...")
-
-        for filename in filenames:
-            # 절대 경로가 아니면 폴더 경로 결합
-            if not filename.endswith('.json'): filename += '.json'
+    # ================= [핵심] 하이브리드 시퀀스 실행기 =================
+    def _run_hybrid_sequence(self, execution_queue):
+        idx = 0
+        while idx < len(execution_queue) and not self.stop_signal:
+            item = execution_queue[idx]
             
-            if filename.startswith("/"):
-                full_path = filename
+            # 1. 하드코딩 명령어 처리
+            if "CMD_" in item:
+                self.get_logger().info(f"▶ [Step {idx+1}] 하드코딩 실행: {item}")
+                self._execute_hardcoded_step_sync(item)
+                idx += 1
+                
+            # 2. 파일 경로(Nav2) 처리
             else:
-                full_path = os.path.join(PATH_FOLDER, filename)
-            
-            if not os.path.exists(full_path):
-                self.get_logger().error(f"❌ 파일 없음 (건너뜀): {full_path}")
-                continue
+                # 연속된 파일은 하나로 병합해서 Nav2에 전달 (효율성)
+                files_to_merge = []
+                while idx < len(execution_queue) and "CMD_" not in execution_queue[idx]:
+                    files_to_merge.append(execution_queue[idx])
+                    idx += 1
+                
+                self.get_logger().info(f"▶ [Step {idx}] Nav2 주행 시작 (파일 {len(files_to_merge)}개 병합)")
+                success = self._execute_nav2_step_sync(files_to_merge)
+                if not success:
+                    self.get_logger().error("❌ Nav2 주행 실패로 전체 시퀀스 중단")
+                    return
 
-            try:
-                with open(full_path, 'r') as f:
-                    data = json.load(f)
-                    # 데이터 이어 붙이기 (extend)
-                    all_xs.extend(data.get("x", []))
-                    all_ys.extend(data.get("y", []))
-                    # yaw가 없으면 0.0으로 채움
-                    all_yaws.extend(data.get("yaw", [0.0] * len(data.get("x", []))))
-                    self.get_logger().info(f"   + {filename} 로드 완료 ({len(data.get('x', []))} points)")
-            except Exception as e:
-                self.get_logger().error(f"❌ 파일 읽기 에러 {filename}: {e}")
+            # 단계 전환 시 잠시 안정화
+            if not self.stop_signal:
+                time.sleep(0.5)
 
-        if not all_xs:
-            self.get_logger().error("⚠️ 유효한 경로 데이터가 없습니다.")
+        if not self.stop_signal:
+            self.get_logger().info("🏁 모든 시퀀스 완료!")
+            self.publish_completion()
+
+    # ----------------- [A] 하드코딩 동기 실행 (Blocking) -----------------
+    def _execute_hardcoded_step_sync(self, cmd):
+        steps = self._parse_command_multi_step(cmd)
+        if not steps:
+            self.get_logger().warn(f"⚠️ 정의되지 않은 명령어: {cmd}")
             return
 
-        # ✅ [옵션] 보간(Smoothing) 적용 - 점 사이를 촘촘하게 채움
-        # (만약 데이터가 이미 충분히 많다면 이 부분 주석 처리 가능)
+        for step_idx, (deg, dur, direct, v_start, v_end) in enumerate(steps):
+            if self.stop_signal: return
+            self._run_single_motion(deg, dur, direct, v_start, v_end)
+        
+        self._stop_robot()
+
+    def _parse_command_multi_step(self, cmd):
+        """ 정의된 하드코딩 패턴 반환 """
+        if cmd == "CMD_HARD_RIGHT_2S":
+            # P4: 완만한 우회전
+            return [
+                    (0.0, 5.0, 1, 2.0, 1.5),
+                    (-10.0, 5.0, 1, 1.5, 0.0)
+                ]
+        elif cmd == "CMD_HARD_LEFT_BACK_2S":
+            # P5: 후진 (회전 -> 직진 -> 회전)
+            return [
+                (40.0, 3.5, -1, 2.0, 1.5),  # 진입 회전
+                (0.0,  1.5, -1, 1.5, 1.0)  # 중간 직진
+            ]
+        elif cmd == "CMD_HARD_RIGHT_40_3S":
+            # P6: 전진 (긴 직진 -> 꺾어서 진입)
+            return [
+                (-12.0, 13.0, 1, 1.2, 0.0)   # 꺾어서 진입
+            ]
+        elif cmd == "CMD_HARD_FWD_1S":
+            # P7: 단순 직진 (사용 여부에 따라 유지)
+            return [(0.0, 2.0, 1, 2.0, 0.0)]
+        else:
+            return []
+
+    def _run_single_motion(self, steering_deg, duration, direction, start_speed, end_speed):
+        rate_hz = 50 
+        dt = 1.0 / rate_hz
+        steps = int(duration * rate_hz)
+        
+        twist = Twist()
+        for i in range(steps):
+            if self.stop_signal or self.current_mode != "DRIVING": 
+                self._stop_robot()
+                return
+
+            alpha = i / float(steps)
+            current_v = (start_speed * (1.0 - alpha) + end_speed * alpha) * direction
+            
+            if abs(current_v) < 0.01:
+                current_w = 0.0
+            else:
+                rad_steering = math.radians(steering_deg)
+                current_w = (current_v * math.tan(rad_steering)) / self.wheelbase
+
+            twist.linear.x = float(current_v)
+            twist.angular.z = float(current_w)
+            
+            self.cmd_vel_pub.publish(twist)
+            time.sleep(dt)
+
+    def _stop_robot(self):
+        twist = Twist()
+        self.cmd_vel_pub.publish(twist)
+
+    # ----------------- [B] Nav2 동기 실행 (Blocking) -----------------
+    def _execute_nav2_step_sync(self, filenames):
+        # 1. 파일 읽기 및 병합
+        all_xs, all_ys, all_yaws = [], [], []
+        for filename in filenames:
+            if not filename.endswith('.json'): filename += '.json'
+            if filename.startswith("/"): full_path = filename
+            else: full_path = os.path.join(PATH_FOLDER, filename)
+            
+            if os.path.exists(full_path):
+                try:
+                    with open(full_path, 'r') as f:
+                        data = json.load(f)
+                        all_xs.extend(data.get("x", []))
+                        all_ys.extend(data.get("y", []))
+                        all_yaws.extend(data.get("yaw", [0.0] * len(data.get("x", []))))
+                except: pass
+
+        if not all_xs: return False
+        
+        # 보간
         final_xs, final_ys, final_yaws = self.interpolate_points(all_xs, all_ys, all_yaws, step=0.05)
         
-        self.get_logger().info(f"✨ 병합 및 보간 완료! 총 {len(final_xs)}개 포인트 전송")
-        
-        # Nav2 메시지 생성
         ros_path = Path()
         ros_path.header.frame_id = "map"
         ros_path.header.stamp = self.get_clock().now().to_msg()
@@ -154,8 +241,45 @@ class DrivingController(Node):
             pose.pose.orientation.w = math.cos(yaw / 2.0)
             ros_path.poses.append(pose)
 
-        # 한 번에 전송 (Goal 1개)
-        self.send_nav2_goal(ros_path)
+        # 2. Nav2 Action 전송 및 대기
+        goal_msg = FollowPath.Goal()
+        goal_msg.path = ros_path
+        goal_msg.controller_id = "FollowPath"
+        goal_msg.goal_checker_id = "general_goal_checker"
+
+        self._action_client.wait_for_server()
+        send_future = self._action_client.send_goal_async(goal_msg)
+        
+        # Future 대기 루프 (스레드 블로킹 방지하며 대기)
+        while not send_future.done():
+            if self.stop_signal: 
+                self.cancel_nav2()
+                return False
+            time.sleep(0.1)
+
+        goal_handle = send_future.result()
+        if not goal_handle.accepted:
+            self.get_logger().error("❌ Nav2 경로 거부됨.")
+            return False
+        
+        self.current_goal_handle = goal_handle
+        result_future = goal_handle.get_result_async()
+
+        while not result_future.done():
+            if self.stop_signal:
+                self.cancel_nav2()
+                return False
+            time.sleep(0.1)
+
+        status = result_future.result().status
+        self.current_goal_handle = None
+        
+        if status == 4 or status == 6: 
+            self.get_logger().info(f"✨ Nav2 주행 완료 (Status: {status}) - 다음 단계 진행")
+            return True
+        else:
+            self.get_logger().warn(f"⚠️ Nav2 주행 실패 (Status: {status})")
+            return False
 
     def interpolate_points(self, xs, ys, yaws, step=0.05):
         new_xs, new_ys, new_yaws = [], [], []
@@ -185,57 +309,16 @@ class DrivingController(Node):
         new_xs.append(xs[-1]); new_ys.append(ys[-1]); new_yaws.append(yaws[-1])
         return new_xs, new_ys, new_yaws
 
-    def send_nav2_goal(self, ros_path):
-        goal_msg = FollowPath.Goal()
-        goal_msg.path = ros_path
-        goal_msg.controller_id = "FollowPath"
-        goal_msg.goal_checker_id = "general_goal_checker"
-
-        self._action_client.wait_for_server()
-        future = self._action_client.send_goal_async(goal_msg)
-        future.add_done_callback(self.goal_response_callback)
-
-    def goal_response_callback(self, future):
-        goal_handle = future.result()
-        if not goal_handle.accepted:
-            self.get_logger().error("❌ Nav2 경로 거부됨.")
-            return
-        
-        self.current_goal_handle = goal_handle
-        result_future = goal_handle.get_result_async()
-        result_future.add_done_callback(self.get_result_callback)
-
-    def get_result_callback(self, future):
-        result = future.result()
-        if result.status == 4: # SUCCEEDED
-            self.get_logger().info("🏁 전체 경로 주행 완료.")
-            self.publish_completion()
-        else:
-            self.get_logger().warn(f"⚠️ 주행 비정상 종료 (Status: {result.status})")
-            self.current_goal_handle = None
-
-    def publish_completion(self):
-        msg = String()
-        msg.data = "DRIVING_COMPLETE"
-        self.completion_pub.publish(msg)
-
-    def execute_raw_path(self, points):
-        ros_path = Path()
-        ros_path.header.frame_id = "map"
-        ros_path.header.stamp = self.get_clock().now().to_msg()
-        for p in points:
-            pose = PoseStamped()
-            pose.header = ros_path.header
-            pose.pose.position.x = float(p[0])
-            pose.pose.position.y = float(p[1])
-            ros_path.poses.append(pose)
-        self.send_nav2_goal(ros_path)
-
     def cancel_nav2(self):
         if self.current_goal_handle:
             self.current_goal_handle.cancel_goal_async()
             self.current_goal_handle = None
         self.cmd_vel_pub.publish(Twist())
+
+    def publish_completion(self):
+        msg = String()
+        msg.data = "DRIVING_COMPLETE"
+        self.completion_pub.publish(msg)
 
 def main(args=None):
     rclpy.init(args=args)

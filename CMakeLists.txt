@@ -21,8 +21,10 @@ install(PROGRAMS
   test_scripts/docking_ai_test_v2.py
   test_scripts/gesture_ai_test.py
   test_scripts/generate_nav2_json.py
+  test_scripts/test_drive.py
   sample_code/test_gripper.py
   sample_code/motor_test.py
+  sample_code/reset_robot.py
   
   DESTINATION lib/${PROJECT_NAME}
 )
