@@ -62,9 +62,9 @@ class DockingController(Node):
         self.create_timer(1.0, self.send_init_gripper)
         self.is_init_sent = False
 
-        self.TARGET_DIST = 16.5
+        self.TARGET_DIST = 17.0
         self.STOP_TOLERANCE = 1.0
-        self.FIXED_SPEED = -0.06
+        self.FIXED_SPEED = -0.07
         # self.FIXED_SPEED = -0.1
         
         self.system_mode = "IDLE"

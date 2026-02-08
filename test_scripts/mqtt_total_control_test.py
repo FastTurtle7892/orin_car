@@ -18,15 +18,16 @@ MQTT_BROKER = "autowingcar.o-r.kr"
 MQTT_PORT = 8883
 CAR_CODE = "TC01"
 
+# [중요] JSON 파일들이 있는 절대 경로 폴더 (홈 디렉토리 기준)
+DATA_ROOT_DIR = os.path.expanduser("~/trailer_paths5")
+
 # 토픽 설정
 TOPIC_CMD_CONTROL = f"autowing_car/v1/{CAR_CODE}/cmd/control"
 TOPIC_CMD_DRIVE   = f"autowing_car/v1/{CAR_CODE}/cmd/drive"
 TOPIC_MONITORING = "autowing_car/v1/monitoring"
 TOPIC_ACK        = "autowing_car/v1/ack"
 
-MAP_DATA_PATH = os.path.expanduser("~/map_data.json")
-
-# 출발지(Home) 좌표
+# 출발지(Home) 좌표 (복귀 감지용)
 HOME_X = -0.8893
 HOME_Y = 2.5
 HOME_THRESHOLD = 0.5  
@@ -49,11 +50,22 @@ class MqttTotalControl(Node):
         super().__init__('mqtt_total_control')
         
         self.get_logger().info("============================================")
-        self.get_logger().info(f"📢 [MQTT] 모든 명령 Fail-Safe (IDLE Reset) 적용")
+        self.get_logger().info(f"📢 [MQTT] 개별 파일 절대 경로 매핑 모드")
+        self.get_logger().info(f"📂 타겟 폴더: {DATA_ROOT_DIR}")
         self.get_logger().info("============================================")
         
-        self.map_data = {}
-        self.load_map_data()
+        # ✅ [매핑 설정] Edge ID -> 파일명 (map_data.json 안 씀)
+        # 여기에 실제 엣지 ID와 파일명을 매칭시키세요.
+        self.edge_to_file_map = {
+            "E_n1_to_n2": "P1-1_origin",
+            "E_n2_to_n3": "P2-1_origin",
+            "E_n3_to_n4": "P3-1_origin",
+            "E_n4_to_n5": "P4-1_origin",
+            "E_n5_to_n6": "P5-1_origin",
+            "E_n6_to_n7": "P6-1_origin",
+            "E_n7_to_n8": "P7-1_origin"
+        }
+        self.get_logger().info(f"🗺️ 매핑 로드됨: {self.edge_to_file_map}")
 
         qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
@@ -78,7 +90,7 @@ class MqttTotalControl(Node):
         
         self.pending_final_action = "NONE"
         self.paused_context = None 
-        self.latest_drive_path = []
+        self.latest_drive_paths = [] 
 
         self.create_timer(0.5, self.publish_mode_periodic)
         self.create_timer(1.0, self.publish_monitor_status) 
@@ -99,17 +111,6 @@ class MqttTotalControl(Node):
             self.get_logger().info(f"✅ Connected to Broker: {MQTT_BROKER}")
         except Exception as e:
             self.get_logger().error(f"❌ Connection Failed: {e}")
-
-    def load_map_data(self):
-        if os.path.exists(MAP_DATA_PATH):
-            try:
-                with open(MAP_DATA_PATH, 'r', encoding='utf-8') as f:
-                    self.map_data = json.load(f)
-                self.get_logger().info(f"🗺️ Map Loaded: {len(self.map_data)} edges")
-            except Exception as e:
-                self.get_logger().error(f"❌ Map Load Error: {e}")
-        else:
-            self.get_logger().warn(f"⚠️ Map file missing: {MAP_DATA_PATH}")
 
     def on_connect(self, client, userdata, flags, rc):
         client.subscribe(TOPIC_CMD_CONTROL)
@@ -133,11 +134,9 @@ class MqttTotalControl(Node):
             self.send_ack("CONNECT", "SUCCESS")
             self.publish_monitor_status()
 
-        # ✅ 그리퍼 해제 -> 마샬러 모드로 전환
         elif data == "RELEASE_COMPLETE":
-            self.get_logger().info("🔓 그리퍼 해제 완료 -> 👮 마샬러 모드 자동 진입")
-            self.current_mode = "MARSHAL"
-            self.monitor_mode = "MARSHALING"
+            self.current_mode = "IDLE"
+            self.monitor_mode = "WAITING_FOR_RETURN"
             self.send_ack("DISCONNECT", "SUCCESS")
             self.publish_monitor_status()
 
@@ -161,7 +160,7 @@ class MqttTotalControl(Node):
                 self.monitor_mode = "IDLE"
             
             self.pending_final_action = "NONE"
-            self.latest_drive_path = []
+            self.latest_drive_paths = []
 
     def publish_mode_periodic(self):
         if self.current_mode != self.last_published_mode:
@@ -225,15 +224,14 @@ class MqttTotalControl(Node):
             if topic == TOPIC_CMD_CONTROL:
                 cmd = data.get("cmd")
                 
-                # 1. EMERGENCY_STOP
                 if cmd == "EMERGENCY_STOP":
                     if self.monitor_mode != "STOP":
-                        self.get_logger().warn("🚨 EMERGENCY STOP RECEIVED")
+                        self.get_logger().warn("🚨 EMERGENCY STOP")
                         self.paused_context = {
                             "internal_mode": self.current_mode,
                             "monitor_mode": self.monitor_mode,
                             "final_action": self.pending_final_action,
-                            "drive_path": self.latest_drive_path
+                            "drive_paths": self.latest_drive_paths
                         }
                         self.path_pub.publish(String(data="[]"))
                         self.current_mode = "IDLE"
@@ -242,25 +240,22 @@ class MqttTotalControl(Node):
                     else:
                         self.send_ack(cmd, "ALREADY_STOPPED")
 
-                # 2. RESUME (재개)
                 elif cmd == "RESUME":
                     if self.monitor_mode == "STOP":
                         if self.paused_context:
-                            self.get_logger().info("▶️ RESUME Command Received")
+                            self.get_logger().info("▶️ RESUME")
                             ctx = self.paused_context
                             self.current_mode = ctx["internal_mode"]
                             self.monitor_mode = ctx["monitor_mode"]
                             self.pending_final_action = ctx["final_action"]
-                            saved_path = ctx["drive_path"]
+                            saved_paths = ctx["drive_paths"]
 
-                            if self.current_mode == "DRIVING" and saved_path:
-                                self.path_pub.publish(String(data=json.dumps(saved_path)))
+                            if self.current_mode == "DRIVING" and saved_paths:
+                                self.path_pub.publish(String(data=json.dumps(saved_paths)))
                             
                             self.paused_context = None
                             self.send_ack(cmd, "SUCCESS_RESUMED")
                         else:
-                            # ✅ [핵심 수정] 복구할 정보가 없으면 IDLE로 초기화 (STOP 탈출)
-                            self.get_logger().warn("⚠️ RESUME 실패 (저장된 상태 없음) -> IDLE로 초기화")
                             self.current_mode = "IDLE"
                             self.monitor_mode = "IDLE"
                             self.send_ack(cmd, "RESET_TO_IDLE")
@@ -268,12 +263,6 @@ class MqttTotalControl(Node):
                         self.send_ack(cmd, "NOT_IN_STOP_MODE")
 
             elif topic == TOPIC_CMD_DRIVE:
-                # 마샬러 모드일 때 차단
-                if self.monitor_mode == "MARSHALING" or self.current_mode == "MARSHAL":
-                    self.get_logger().warn("🛡️ 마샬러 모드 실행 중! 서버의 주행 명령을 무시합니다.")
-                    self.send_ack("DRIVE", "IGNORED_IN_MARSHAL_MODE")
-                    return
-
                 if self.monitor_mode == "STOP":
                     self.send_ack("DRIVE", "FAILED_IN_STOP_MODE")
                     return
@@ -284,41 +273,51 @@ class MqttTotalControl(Node):
                     edge_ids = drive_data.get("edgeIds", [])
                     final_action = drive_data.get("finalAction", "NONE")
                     
-                    full_path = self.convert_edges_to_waypoints(edge_ids)
+                    # ✅ [변환] 엣지 ID -> 절대 경로 리스트 (map_data 없음)
+                    abs_path_list = self.convert_edges_to_absolute_paths(edge_ids)
                     
-                    if full_path:
+                    if abs_path_list:
                         self.pending_final_action = final_action
                         self.current_mode = "DRIVING"
-                        self.latest_drive_path = full_path
+                        self.latest_drive_paths = abs_path_list
                         
                         if final_action in ["DOCK", "CONNECT"]: self.monitor_mode = "MOVING_TO_GATE"
                         elif final_action in ["UNDOCK", "DISCONNECT"]: self.monitor_mode = "TOWING"
                         elif final_action in ["PARK"]: self.monitor_mode = "RETURNING"
                         else: self.monitor_mode = "MOVING_TO_GATE"
 
-                        self.path_pub.publish(String(data=json.dumps(full_path)))
+                        self.get_logger().info(f"📤 경로 전송: {abs_path_list}")
+                        self.path_pub.publish(String(data=json.dumps(abs_path_list)))
                         self.send_ack("DRIVE", "SUCCESS")
                     else:
-                        # ✅ [핵심 수정] 주행 실패 시에도 IDLE로 초기화
-                        self.get_logger().warn("⚠️ 경로 생성 실패 -> IDLE로 초기화")
+                        self.get_logger().warn("⚠️ 매핑된 파일 없음 -> IDLE")
                         self.current_mode = "IDLE"
                         self.monitor_mode = "IDLE"
-                        self.pending_final_action = "NONE"
-                        self.send_ack("DRIVE", "FAILED_NO_PATH")
+                        self.send_ack("DRIVE", "FAILED_MAPPING")
 
             self.publish_monitor_status()
                 
         except Exception as e:
             self.get_logger().error(f"Parsing Error: {e}")
 
-    def convert_edges_to_waypoints(self, edge_ids):
-        waypoints = []
+    def convert_edges_to_absolute_paths(self, edge_ids):
+        """ 엣지 ID를 받아서, trailer_paths4 안의 파일 절대 경로로 변환 """
+        path_list = []
         for edge_id in edge_ids:
-            if edge_id in self.map_data:
-                points = self.map_data[edge_id]
-                if isinstance(points, list):
-                    waypoints.extend(points)
-        return waypoints
+            if edge_id in self.edge_to_file_map:
+                filename = self.edge_to_file_map[edge_id]
+                
+                # 확장자 처리
+                if not filename.endswith('.json'):
+                    filename += '.json'
+                
+                # ✅ [절대 경로 생성]
+                full_path = os.path.join(DATA_ROOT_DIR, filename)
+                path_list.append(full_path)
+            else:
+                self.get_logger().error(f"❌ 맵핑 안 된 엣지 ID: {edge_id}")
+                return None 
+        return path_list
 
 def main(args=None):
     rclpy.init(args=args)
