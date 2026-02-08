@@ -46,7 +46,7 @@ class DrivingController(Node):
         self.wheelbase = 0.145
 
         # 초기 위치 파라미터 (사용자 요청 값 적용)
-        self.declare_parameter('init_x', -0.8893)
+        self.declare_parameter('init_x', -0.895)
         self.declare_parameter('init_y',  2.3)
         self.declare_parameter('init_yaw', -1.57) 
 
@@ -170,7 +170,7 @@ class DrivingController(Node):
             ]
         elif cmd == "CMD_HARD_FWD_1S":
             # P7: 단순 직진 (사용 여부에 따라 유지)
-            return [(0.0, 2.0, 1, 2.0, 0.0)]
+            return [(0.0, 4.0, 1, 2.0, 0.0)]
         else:
             return []
 
